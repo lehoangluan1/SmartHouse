@@ -1,0 +1,152 @@
+.device-switch-card {
+  min-height: 58px;
+  border: 1px solid #e6eaf0;
+  cursor: pointer;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.device-switch-card__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.device-switch-card__name {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #374151;
+}
+
+.device-switch-card__mode {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #a0a7b4;
+}
+
+.device-switch-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.device-switch-card__toggle {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: #cfd5de;
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.device-switch-card__toggle.on {
+  background: #8cb7f5;
+}
+
+.device-switch-card__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+
+.device-switch-card__toggle.on .device-switch-card__knob {
+  left: 21px;
+}
+
+.device-switch-card__on-text {
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+
+.device-switch-card__icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+}
+
+.device-switch-card__icon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.device-switch-card__icon.fan.enabled {
+  color: #4f8ff7;
+}
+
+.device-switch-card__icon.bulb.disabled {
+  color: #c9ced7;
+}
+
+.device-switch-card.selected {
+  border: 1px solid #111827;
+  box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.08);
+}
+
+.device-switch-card__intensity {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.device-switch-card__intensity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.device-switch-card__intensity-head strong {
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.device-switch-card__slider {
+  width: 100%;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.device-switch-card__slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+  .device-switch-card {
+    padding: 10px;
+  }
+
+  .device-switch-card__name {
+    font-size: 11px;
+  }
+
+  .device-switch-card__mode {
+    font-size: 10px;
+  }
+}

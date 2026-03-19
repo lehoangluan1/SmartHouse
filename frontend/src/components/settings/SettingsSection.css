@@ -1,0 +1,66 @@
+.settings-section + .settings-section {
+  margin-top: 18px;
+}
+
+.settings-section__header {
+  margin-bottom: 12px;
+}
+
+.settings-section__title {
+  margin: 0;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-section__description {
+  margin: 8px 0 0;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-section__body {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .settings-section + .settings-section {
+    margin-top: 16px;
+  }
+
+  .settings-section__header {
+    margin-bottom: 10px;
+  }
+
+  .settings-section__title {
+    font-size: 13px;
+    gap: 4px;
+  }
+
+  .settings-section__description {
+    font-size: 11px;
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 479px) {
+  .settings-section + .settings-section {
+    margin-top: 14px;
+  }
+
+  .settings-section__title {
+    font-size: 12px;
+  }
+
+  .settings-section__description {
+    font-size: 10px;
+    line-height: 1.45;
+  }
+}

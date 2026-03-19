@@ -1,0 +1,274 @@
+.settings-table-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.settings-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.settings-table thead th {
+  height: 42px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  padding: 0 14px;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.settings-table tbody td {
+  height: 46px;
+  padding: 0 14px;
+  color: #374151;
+  font-size: 13px;
+  border-bottom: 1px solid #eef2f7;
+  vertical-align: middle;
+}
+
+.settings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.permission-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.permission-user span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-user__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.permission-switch {
+  position: relative;
+  width: 54px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: #d1d5db;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.permission-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+  transition: left 0.2s ease;
+}
+
+.permission-switch.is-on {
+  background: #1f6ed4;
+}
+
+.permission-switch.is-on .permission-switch__thumb {
+  left: 31px;
+}
+
+.permission-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.permission-user__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  background: #e9eefc;
+  color: #3451b2;
+  flex-shrink: 0;
+}
+
+.permission-user__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.permission-user__name {
+  font-weight: 600;
+}
+
+.permission-user__badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef7ee;
+  color: #2f7d32;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.permission-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.permission-action-button {
+  border: 1px solid #d0d7e2;
+  background: #fff;
+  color: #223;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.permission-action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.permission-action-button--danger {
+  border-color: #efcaca;
+  color: #b42318;
+}
+
+.permission-table__error {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f3d0d0;
+  background: #fef2f2;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-table__empty {
+  text-align: center;
+  padding: 24px;
+  color: #667085;
+}
+
+@media (max-width: 991px) {
+  .settings-table {
+    min-width: 580px;
+  }
+
+  .settings-table thead th,
+  .settings-table tbody td {
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-table {
+    min-width: 520px;
+  }
+
+  .settings-table thead th {
+    height: 40px;
+    font-size: 11px;
+    padding: 0 10px;
+  }
+
+  .settings-table tbody td {
+    height: 44px;
+    font-size: 12px;
+    padding: 0 10px;
+  }
+
+  .permission-user {
+    gap: 8px;
+  }
+
+  .permission-user__avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+
+  .permission-switch {
+    width: 48px;
+    height: 24px;
+  }
+
+  .permission-switch__thumb {
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .permission-switch.is-on .permission-switch__thumb {
+    left: 27px;
+  }
+}
+
+@media (max-width: 479px) {
+  .settings-table {
+    min-width: 480px;
+  }
+
+  .settings-table thead th {
+    font-size: 10px;
+    padding: 0 8px;
+  }
+
+  .settings-table tbody td {
+    font-size: 11px;
+    padding: 0 8px;
+  }
+
+  .permission-user {
+    gap: 6px;
+  }
+
+  .permission-user__avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 9px;
+  }
+
+  .permission-switch {
+    width: 44px;
+    height: 22px;
+  }
+
+  .permission-switch__thumb {
+    width: 16px;
+    height: 16px;
+  }
+
+  .permission-switch.is-on .permission-switch__thumb {
+    left: 25px;
+  }
+}

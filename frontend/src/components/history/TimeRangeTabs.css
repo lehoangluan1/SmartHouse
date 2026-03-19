@@ -1,0 +1,49 @@
+.time-range-tabs {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.time-range-tabs__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.time-range-tabs__list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.time-range-tabs__item {
+  height: 32px;
+  min-width: 92px;
+  padding: 0 14px;
+  border: none;
+  border-right: 1px solid #d1d5db;
+  background: #fff;
+  color: #5b6472;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.time-range-tabs__item:last-child {
+  border-right: none;
+}
+
+.time-range-tabs__item.active {
+  background: #1f66d1;
+  color: #fff;
+  font-weight: 700;
+}
+
+.time-range-tabs__item:hover:not(.active) {
+  background: #f8fafc;
+}

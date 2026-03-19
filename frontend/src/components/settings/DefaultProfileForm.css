@@ -1,0 +1,89 @@
+.default-profile-card {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.default-profile-card__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.default-profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.default-profile-field__label {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.default-profile-field__input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.default-profile-field__input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 0 10px;
+  color: #111827;
+  font-size: 13px;
+  outline: none;
+}
+
+.default-profile-field__input:focus {
+  border-color: #3b82f6;
+}
+
+.default-profile-field__suffix {
+  color: #9ca3af;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.default-profile-card__actions {
+  margin-top: 10px;
+}
+
+.default-profile-card__save-btn {
+  height: 34px;
+  border: none;
+  border-radius: 4px;
+  padding: 0 14px;
+  background: #1f6ed4;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.default-profile-card__save-btn:hover {
+  background: #195fba;
+}
+
+.default-profile-card__save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .default-profile-card__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .default-profile-card__grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,202 @@
+.settings-table-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.settings-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.settings-table thead th {
+  height: 42px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  padding: 0 14px;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.settings-table tbody td {
+  height: 46px;
+  padding: 10px 14px;
+  color: #374151;
+  font-size: 13px;
+  border-bottom: 1px solid #eef2f7;
+  vertical-align: middle;
+}
+
+.settings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.settings-table__empty {
+  text-align: center;
+  color: #9ca3af;
+}
+
+.schedule-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.schedule-time__chip {
+  min-width: 44px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #1f2937;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.schedule-time__to {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.schedule-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #6b21a8;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.schedule-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-actions button {
+  height: 26px;
+  border-radius: 4px;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.schedule-actions__edit {
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.schedule-actions__delete {
+  border: 1px solid #fca5a5;
+  background: #ffffff;
+  color: #ef4444;
+}
+
+.schedule-time__overnight {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@media (max-width: 991px) {
+  .settings-table {
+    min-width: 700px;
+  }
+
+  .settings-table thead th,
+  .settings-table tbody td {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-table {
+    min-width: 640px;
+  }
+
+  .settings-table thead th {
+    height: 40px;
+    font-size: 11px;
+    padding: 0 10px;
+  }
+
+  .settings-table tbody td {
+    font-size: 12px;
+    padding: 10px;
+  }
+
+  .schedule-time {
+    gap: 4px;
+  }
+
+  .schedule-time__chip {
+    min-width: 40px;
+    font-size: 10px;
+    padding: 0 5px;
+  }
+
+  .schedule-time__to {
+    font-size: 11px;
+  }
+
+  .schedule-mode-badge {
+    min-width: 48px;
+    font-size: 10px;
+    padding: 0 7px;
+  }
+
+  .schedule-actions {
+    gap: 6px;
+  }
+
+  .schedule-actions button {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 479px) {
+  .settings-table {
+    min-width: 600px;
+  }
+
+  .settings-table thead th {
+    font-size: 10px;
+    padding: 0 8px;
+  }
+
+  .settings-table tbody td {
+    font-size: 11px;
+    padding: 8px;
+  }
+
+  .schedule-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schedule-actions button {
+    width: 100%;
+  }
+}

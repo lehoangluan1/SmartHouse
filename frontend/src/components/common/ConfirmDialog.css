@@ -1,0 +1,142 @@
+.confirm-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 460px;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.22);
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  animation: confirmDialogFadeIn 0.18s ease;
+}
+
+.confirm-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 22px 14px;
+}
+
+.confirm-dialog__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.confirm-dialog__icon--danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.confirm-dialog__icon--primary {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.confirm-dialog__heading h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  line-height: 1.3;
+  color: #111827;
+}
+
+.confirm-dialog__heading p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px 22px;
+}
+
+.confirm-dialog__button {
+  min-width: 110px;
+  height: 42px;
+  border: none;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.confirm-dialog__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirm-dialog__button--secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.confirm-dialog__button--secondary:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.confirm-dialog__button--danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.confirm-dialog__button--danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.confirm-dialog__button--primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.confirm-dialog__button--primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+@keyframes confirmDialogFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 640px) {
+  .confirm-dialog {
+    max-width: 100%;
+    border-radius: 16px;
+  }
+
+  .confirm-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-dialog__button {
+    width: 100%;
+  }
+}

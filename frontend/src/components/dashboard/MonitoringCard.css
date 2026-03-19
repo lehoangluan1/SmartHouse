@@ -1,0 +1,86 @@
+.monitoring-card {
+  min-height: 92px;
+  border: 1px solid #e6eaf0;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 14px 14px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.monitoring-card__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.monitoring-card__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+  line-height: 1.2;
+}
+
+.monitoring-card__value {
+  margin-top: 6px;
+  font-size: 19px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+
+.monitoring-card__updated {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #c0c7d1;
+  line-height: 1.2;
+}
+
+.monitoring-card__icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.monitoring-card__icon svg {
+  width: 25px;
+  height: 25px;
+}
+
+.monitoring-card__icon.temperature {
+  color: #f59e0b;
+}
+
+.monitoring-card__icon.humidity {
+  color: #60a5fa;
+}
+
+.monitoring-card__icon.light {
+  color: #eab308;
+}
+
+@media (min-width: 1440px) {
+  .monitoring-card {
+    min-height: 102px;
+  }
+
+  .monitoring-card__value {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 640px) {
+  .monitoring-card {
+    min-height: 84px;
+    padding: 12px;
+  }
+
+  .monitoring-card__value {
+    font-size: 18px;
+  }
+}

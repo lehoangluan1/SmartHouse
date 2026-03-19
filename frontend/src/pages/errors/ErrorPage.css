@@ -1,0 +1,75 @@
+.error-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.12), transparent 30%),
+    #0f172a;
+}
+
+.error-page__card {
+  width: min(100%, 560px);
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 24px;
+  padding: 40px 32px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+  text-align: center;
+}
+
+.error-page__code {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.error-page__title {
+  margin: 0 0 12px;
+  font-size: 28px;
+  color: #111827;
+}
+
+.error-page__description {
+  margin: 0 auto;
+  max-width: 420px;
+  color: #4b5563;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.error-page__actions {
+  margin-top: 28px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.error-page__button {
+  text-decoration: none;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.error-page__button--primary {
+  background: #111827;
+  color: white;
+}
+
+.error-page__button--primary:hover {
+  opacity: 0.92;
+}
+
+.error-page__button--ghost {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.error-page__button--ghost:hover {
+  background: #e5e7eb;
+}

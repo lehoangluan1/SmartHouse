@@ -1,0 +1,38 @@
+.audit-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.audit-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.audit-icon--danger {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.audit-icon--info {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.audit-icon--success {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.audit-icon--warning {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.audit-icon--neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}

@@ -1,0 +1,194 @@
+{
+  "properties": [
+    {
+      "name": "spring.application.name",
+      "type": "java.lang.String",
+      "description": "Name of the Spring Boot application."
+    },
+    {
+      "name": "server.port",
+      "type": "java.lang.Integer",
+      "description": "Port on which the application runs."
+    },
+
+    {
+      "name": "spring.datasource.url",
+      "type": "java.lang.String",
+      "description": "JDBC URL of the database."
+    },
+    {
+      "name": "spring.datasource.username",
+      "type": "java.lang.String",
+      "description": "Database username."
+    },
+    {
+      "name": "spring.datasource.password",
+      "type": "java.lang.String",
+      "description": "Database password."
+    },
+
+    {
+      "name": "spring.jpa.hibernate.ddl-auto",
+      "type": "java.lang.String",
+      "description": "DDL mode (none, validate, update, create, create-drop)."
+    },
+    {
+      "name": "spring.jpa.open-in-view",
+      "type": "java.lang.Boolean",
+      "description": "Enable Open Session in View."
+    },
+    {
+      "name": "spring.jpa.properties.hibernate.format_sql",
+      "type": "java.lang.Boolean",
+      "description": "Format SQL logs."
+    },
+    {
+      "name": "spring.jpa.show-sql",
+      "type": "java.lang.Boolean",
+      "description": "Show SQL in logs."
+    },
+
+    {
+      "name": "app.jwt.secret",
+      "type": "java.lang.String",
+      "description": "Secret key for signing JWT tokens."
+    },
+    {
+      "name": "app.jwt.expiration-minutes",
+      "type": "java.lang.Long",
+      "description": "Access token expiration time in minutes."
+    },
+
+    {
+      "name": "app.security.refresh-token.ttl-days",
+      "type": "java.lang.Integer",
+      "description": "Number of days the refresh token is valid."
+    },
+    {
+      "name": "app.security.refresh-token.max-active-per-user",
+      "type": "java.lang.Integer",
+      "description": "Maximum number of active refresh tokens per user."
+    },
+    {
+      "name": "app.security.refresh-token.cleanup-cron",
+      "type": "java.lang.String",
+      "description": "Cron expression for cleaning up expired refresh tokens."
+    },
+    {
+      "name": "app.security.refresh-token.rotate-on-refresh",
+      "type": "java.lang.Boolean",
+      "description": "Whether to create a new refresh token on each refresh."
+    },
+
+    {
+      "name": "app.offline-threshold-seconds",
+      "type": "java.lang.Long",
+      "description": "Seconds without data before marking device offline."
+    },
+    {
+      "name": "app.scheduler.zone",
+      "type": "java.lang.String",
+      "description": "Default timezone for scheduler tasks."
+    },
+
+    {
+      "name": "app.oauth.google.client-id",
+      "type": "java.lang.String",
+      "description": "Google OAuth client ID."
+    },
+    {
+      "name": "app.oauth.google.client-secret",
+      "type": "java.lang.String",
+      "description": "Google OAuth client secret."
+    },
+
+    {
+      "name": "app.outbox.publisher.fixed-delay-ms",
+      "type": "java.lang.Long",
+      "description": "Delay between outbox polling cycles (ms)."
+    },
+    {
+      "name": "app.outbox.publisher.batch-size",
+      "type": "java.lang.Integer",
+      "description": "Max number of events processed per batch."
+    },
+
+    {
+      "name": "spring.mail.host",
+      "type": "java.lang.String",
+      "description": "SMTP server host."
+    },
+    {
+      "name": "spring.mail.port",
+      "type": "java.lang.Integer",
+      "description": "SMTP server port."
+    },
+    {
+      "name": "spring.mail.username",
+      "type": "java.lang.String",
+      "description": "SMTP username."
+    },
+    {
+      "name": "spring.mail.password",
+      "type": "java.lang.String",
+      "description": "SMTP password."
+    },
+    {
+      "name": "spring.mail.properties.mail.smtp.auth",
+      "type": "java.lang.Boolean",
+      "description": "Enable SMTP authentication."
+    },
+    {
+      "name": "spring.mail.properties.mail.smtp.starttls.enable",
+      "type": "java.lang.Boolean",
+      "description": "Enable STARTTLS."
+    },
+
+    {
+      "name": "app.notification.mail.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable email notifications."
+    },
+    {
+      "name": "app.notification.mail.from",
+      "type": "java.lang.String",
+      "description": "Sender email address."
+    },
+    {
+      "name": "app.notification.mail.admin-to",
+      "type": "java.lang.String",
+      "description": "Fallback admin email."
+    },
+
+    {
+      "name": "app.messaging.user.exchange",
+      "type": "java.lang.String",
+      "description": "RabbitMQ exchange for user events."
+    },
+    {
+      "name": "app.messaging.user.queue",
+      "type": "java.lang.String",
+      "description": "RabbitMQ queue for user events."
+    },
+    {
+      "name": "app.messaging.user.routing-key",
+      "type": "java.lang.String",
+      "description": "RabbitMQ routing key."
+    },
+    {
+      "name": "app.telegram.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable Telegram notifications."
+    },
+    {
+      "name": "app.telegram.bot-token",
+      "type": "java.lang.String",
+      "description": "Telegram bot token generated by BotFather."
+    },
+    {
+      "name": "app.telegram.chat-id",
+      "type": "java.lang.String",
+      "description": "Telegram chat ID that receives bot notifications."
+    }
+  ]
+}

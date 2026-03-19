@@ -1,0 +1,78 @@
+.device-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.device-filter-bar__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.device-filter-bar__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.device-filter-chip {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid #cfd6df;
+  background: #fff;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.device-filter-chip:hover {
+  background: #f8fafc;
+}
+
+.device-filter-chip.active.neutral {
+  color: #374151;
+  border-color: #cfd6df;
+  background: #f8fafc;
+}
+
+.device-filter-chip.active.blue {
+  color: #1f66d1;
+  border-color: #1f66d1;
+  background: #eff6ff;
+}
+
+.device-filter-chip.active.orange {
+  color: #f97316;
+  border-color: #f97316;
+  background: #fff7ed;
+}
+
+.device-filter-chip.active.yellow {
+  color: #ca8a04;
+  border-color: #ca8a04;
+  background: #fefce8;
+}
+
+.device-filter-chip.active.green {
+  color: #2e7d32;
+  border-color: #2e7d32;
+  background: #f0fdf4;
+}
+
+.device-filter-chip.active.purple {
+  color: #9333ea;
+  border-color: #9333ea;
+  background: #faf5ff;
+}
+
+.device-filter-chip__check {
+  font-size: 13px;
+  line-height: 1;
+}

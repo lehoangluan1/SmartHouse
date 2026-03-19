@@ -1,0 +1,9 @@
+.google-callback__loading {
+  text-align: center;
+  color: #667085;
+  font-size: 14px;
+}
+
+.google-callback__actions {
+  margin-top: 12px;
+}

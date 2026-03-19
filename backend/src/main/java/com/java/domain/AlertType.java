@@ -1,0 +1,16 @@
+package com.java.domain;
+
+public enum AlertType {
+    CRITICAL_TEMP,
+    DEVICE_OFFLINE,
+    SENSOR_ERROR,
+    HIGH_HUMIDITY,
+    LOW_HUMIDITY,
+    LOW_LIGHT,
+    HIGH_LIGHT,
+    MOTION_DETECTED,
+    CUSTOM,
+    TEMP_TOO_HIGH,
+    TEMP_TOO_LOW,
+    WRONG_PASSWORD
+}

@@ -1,0 +1,53 @@
+.segment-control {
+  margin-top: 10px;
+  border: 1px solid #e6eaf0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.segment-control__title {
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: #4b5563;
+}
+
+.segment-control__group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.segment-control__button {
+  min-width: 72px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid #d1d7e0;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.segment-control__button.active {
+  background: #2f74d1;
+  border-color: #2f74d1;
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .segment-control__group {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .segment-control__button {
+    width: 100%;
+    min-width: 0;
+  }
+}
