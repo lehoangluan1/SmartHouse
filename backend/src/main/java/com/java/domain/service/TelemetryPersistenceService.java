@@ -26,6 +26,7 @@ public class TelemetryPersistenceService {
     private final SensorRepository sensorRepository;
     private final SensorDataRepository sensorDataRepository;
     private final TelemetryValueParser telemetryValueParser;
+    private final TelemetryValidationService telemetryValidationService;
     private final DeviceRuntimeStateService deviceRuntimeStateService;
 
     @Transactional
@@ -43,6 +44,9 @@ public class TelemetryPersistenceService {
                 .orElseThrow(() -> new BadRequestException("Device has no attached sensor: " + sensorType));
 
         var data = telemetryValueParser.buildSensorData(sensor, sensorType, request.value());
+
+        telemetryValidationService.validateOrThrow(data);
+
         sensorDataRepository.save(data);
 
         Object runtimeValue = extractRuntimeValue(data);
@@ -85,33 +89,20 @@ public class TelemetryPersistenceService {
 
     private String resolveCapabilityCode(SensorType sensorType) {
         return switch (sensorType) {
-            case TEMPERATURE ->
-                "TEMPERATURE";
-            case HUMIDITY ->
-                "HUMIDITY";
-            case LIGHT ->
-                "BRIGHTNESS";
-            case MOTION ->
-                "MOTION";
-            case DISTANCE ->
-                "DISTANCE";
-            case SMOKE ->
-                "SMOKE";
-            case OTHER ->
-                throw new BadRequestException("No capability mapped for sensorType: " + sensorType);
+            case TEMPERATURE -> "TEMPERATURE";
+            case HUMIDITY -> "HUMIDITY";
+            case LIGHT -> "BRIGHTNESS";
+            case MOTION -> "MOTION";
+            case DISTANCE -> "DISTANCE";
+            case SMOKE -> "SMOKE";
+            case OTHER -> throw new BadRequestException("No capability mapped for sensorType: " + sensorType);
         };
     }
 
     private Object extractRuntimeValue(SensorDataEntity data) {
-        if (data.getValueBoolean() != null) {
-            return data.getValueBoolean();
-        }
-        if (data.getValueNumeric() != null) {
-            return data.getValueNumeric();
-        }
-        if (data.getValueText() != null) {
-            return data.getValueText();
-        }
+        if (data.getValueBoolean() != null) return data.getValueBoolean();
+        if (data.getValueNumeric() != null) return data.getValueNumeric();
+        if (data.getValueText() != null) return data.getValueText();
         throw new BadRequestException("Telemetry payload does not contain a runtime value");
     }
 }

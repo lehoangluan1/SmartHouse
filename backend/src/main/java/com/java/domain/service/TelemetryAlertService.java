@@ -16,6 +16,7 @@ public class TelemetryAlertService {
     private final DeviceConfigService deviceConfigService;
     private final ThresholdStrategyFactory thresholdStrategyFactory;
     private final AlertLifecycleService alertLifecycleService;
+    private final HighTemperatureDurationService highTemperatureDurationService;
 
     public void evaluateThresholds(TelemetryPersistenceResult result, Object rawValue) {
         if (result == null || result.device() == null || result.device().getHome() == null) {
@@ -23,11 +24,8 @@ public class TelemetryAlertService {
         }
 
         ConfigEntity config = deviceConfigService.getActiveConfig(result.device().getId());
-        var strategy = thresholdStrategyFactory.resolve(result.sensorType().name());
-        if (strategy == null) {
-            return;
-        }
 
+        var strategy = thresholdStrategyFactory.resolve(result.sensorType().name());
         strategy.evaluate(result.sensor(), config, rawValue).ifPresent(outcome -> {
             Long alertDeviceId = resolveAlertDeviceId(result, config);
 
@@ -42,6 +40,13 @@ public class TelemetryAlertService {
                     outcome.message()
             );
         });
+
+        if (result.sensorType() == SensorType.TEMPERATURE && result.data() != null) {
+            Long alertDeviceId = resolveAlertDeviceId(result, config);
+            if (alertDeviceId != null) {
+                highTemperatureDurationService.evaluate(alertDeviceId, result.data());
+            }
+        }
     }
 
     private Long resolveAlertDeviceId(TelemetryPersistenceResult result, ConfigEntity config) {

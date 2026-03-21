@@ -618,8 +618,6 @@ TELEMETRY_ITEMS = [
     ("motion_key", "motion", "someone"),
 ]
 
-telemetry_cursor = 0
-
 
 def send_one_telemetry(device_key, sensor_type, value):
     payload = {
@@ -628,28 +626,30 @@ def send_one_telemetry(device_key, sensor_type, value):
         "value": value,
     }
     success, _ = http_post("/api/device-telemetry", payload)
-    SYS["telemetry_error"] = not success
     print(f"[TELEMETRY] {sensor_type}={value} key={device_key} success={success}")
     return success
 
 
-def send_next_telemetry():
-    global telemetry_cursor
-    total = len(TELEMETRY_ITEMS)
+def send_all_telemetry():
+    ok_all = True
 
-    for _ in range(total):
-        key_name, sensor_type, sys_key = TELEMETRY_ITEMS[telemetry_cursor]
-        telemetry_cursor = (telemetry_cursor + 1) % total
-
+    for key_name, sensor_type, sys_key in TELEMETRY_ITEMS:
         device_key = KEYS.get(key_name)
         value = SYS.get(sys_key)
+
         if sys_key == "someone":
             value = bool(value)
 
-        if device_key is not None and value is not None:
-            return send_one_telemetry(device_key, sensor_type, value)
+        if device_key is None or value is None:
+            ok_all = False
+            continue
 
-    return False
+        success = send_one_telemetry(device_key, sensor_type, value)
+        if not success:
+            ok_all = False
+
+    SYS["telemetry_error"] = not ok_all
+    return ok_all
 
 
 # =========================================================
@@ -740,11 +740,8 @@ def process_light_command(cmd):
     return ack_command(KEYS["light_key"], cid)
 
 
-command_cursor = 0
-
-
-def fetch_one_command():
-    global command_cursor
+def fetch_all_commands():
+    ok_all = True
 
     command_specs = [
         (KEYS["runtime_key"], process_runtime_command),
@@ -752,13 +749,21 @@ def fetch_one_command():
         (KEYS["light_key"], process_light_command),
     ]
 
-    key, fn = command_specs[command_cursor]
-    command_cursor = (command_cursor + 1) % len(command_specs)
+    for key, fn in command_specs:
+        if key is None:
+            ok_all = False
+            continue
 
-    if key is not None:
-        data = fetch_next_command(key)
-        if data is not None:
-            fn(data)
+        try:
+            data = fetch_next_command(key)
+            if data is not None:
+                fn(data)
+        except Exception as e:
+            ok_all = False
+            print("[COMMAND ERROR]", key, e)
+
+    SYS["command_error"] = not ok_all
+    return ok_all
 
 
 # =========================================================
@@ -801,9 +806,6 @@ def boot():
     fetch_config()
     fetch_device_state()
 
-    for _ in range(3):
-        fetch_one_command()
-
     health = yolo_get("/health", timeout=2)
     print("[YOLO HEALTH]", health)
 
@@ -824,6 +826,7 @@ def main():
         "registry": 0,
         "debug": 0,
         "yolo": 0,
+        "temp_alert": 0,
     }
 
     intervals = {
@@ -834,9 +837,8 @@ def main():
         "command": 3000,
         "debug": 2000,
         "yolo": 1200,
+        "temp_alert": 15000,
     }
-
-    net_step = 0
 
     while True:
         now = now_ms()
@@ -858,57 +860,71 @@ def main():
         clear_security_alert_if_needed()
         apply_mode_logic()
 
-        if SYS["nhiet_do"] > CFG["Tcritical"] and now % 15000 < 1000:
+        if SYS["nhiet_do"] > CFG["Tcritical"] and now - last["temp_alert"] >= intervals["temp_alert"]:
             send_temperature_alert_if_needed()
+            last["temp_alert"] = now
 
         set_door_relay(SYS["door_open"])
 
-        # ===== NETWORK TASKS =====
+        # ===== NETWORK TASKS: chạy độc lập, không chia lượt =====
         did_network = False
 
-        if net_step == 0 and now - last["command"] >= intervals["command"]:
+        if now - last["command"] >= intervals["command"]:
             try:
-                fetch_one_command()
-                SYS["command_error"] = False
+                fetch_all_commands()
             except Exception as e:
                 SYS["command_error"] = True
                 print("[COMMAND ERROR]", e)
             last["command"] = now
             did_network = True
 
-        elif net_step == 1 and now - last["state"] >= intervals["state"]:
+        if now - last["state"] >= intervals["state"]:
             try:
                 fetch_device_state()
+                SYS["state_error"] = False
             except Exception as e:
                 SYS["state_error"] = True
                 print("[STATE ERROR]", e)
             last["state"] = now
             did_network = True
 
-        elif net_step == 2 and now - last["telemetry"] >= intervals["telemetry"]:
-            if sensor_is_valid():
-                send_next_telemetry()
+        if now - last["telemetry"] >= intervals["telemetry"]:
+            try:
+                if sensor_is_valid():
+                    send_all_telemetry()
+                else:
+                    SYS["telemetry_error"] = True
+            except Exception as e:
+                SYS["telemetry_error"] = True
+                print("[TELEMETRY ERROR]", e)
             last["telemetry"] = now
             did_network = True
 
-        elif net_step == 3 and now - last["config"] >= intervals["config"]:
-            fetch_config()
+        if now - last["config"] >= intervals["config"]:
+            try:
+                fetch_config()
+                SYS["config_error"] = False
+            except Exception as e:
+                SYS["config_error"] = True
+                print("[CONFIG ERROR]", e)
             last["config"] = now
             did_network = True
 
-        elif net_step == 4 and now - last["registry"] >= intervals["registry"]:
-            load_device_registry()
+        if now - last["registry"] >= intervals["registry"]:
+            try:
+                load_device_registry()
+                SYS["registry_error"] = False
+            except Exception as e:
+                SYS["registry_error"] = True
+                print("[REGISTRY ERROR]", e)
             last["registry"] = now
             did_network = True
-
-        net_step = (net_step + 1) % 5
 
         if now - last["debug"] >= intervals["debug"]:
             print_status()
             last["debug"] = now
 
-        time.sleep(0.5 if not did_network else 0.2)
-
+        time.sleep(0.2 if did_network else 0.5)
 
 if __name__ == "__main__":
     main()

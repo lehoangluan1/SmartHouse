@@ -1,4 +1,6 @@
-import { request } from "./apiClient";
+import { request, unwrapObject } from "./apiClient";
+
+const AUDIT_BASE = "/api/audit";
 
 export async function fetchAuditDashboard({
   homeId,
@@ -12,8 +14,7 @@ export async function fetchAuditDashboard({
   eventKeyword = "",
   eventCategory = "all",
 }) {
-  const res = await request(`/api/audit/homes/${homeId}`, {
-    method: "GET",
+  const result = await request(`${AUDIT_BASE}/homes/${homeId}`, {
     query: {
       from,
       to,
@@ -27,5 +28,5 @@ export async function fetchAuditDashboard({
     },
   });
 
-  return res?.data ?? res;
+  return unwrapObject(result);
 }

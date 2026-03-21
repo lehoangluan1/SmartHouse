@@ -1,7 +1,9 @@
 import { request, unwrapObject } from "./apiClient";
 
+const ADMIN_USERS_BASE = "/api/admin/users";
+
 export async function createUserByAdmin(payload) {
-  const result = await request("/api/admin/users", {
+  const result = await request(ADMIN_USERS_BASE, {
     method: "POST",
     body: payload,
   });
@@ -10,15 +12,12 @@ export async function createUserByAdmin(payload) {
 }
 
 export async function fetchUserAuthProvidersByAdmin(userId) {
-  const result = await request(`/api/admin/users/${userId}/auth-providers`, {
-    method: "GET",
-  });
-
+  const result = await request(`${ADMIN_USERS_BASE}/${userId}/auth-providers`);
   return unwrapObject(result);
 }
 
 export async function linkUserAuthProviderByAdmin(userId, payload) {
-  const result = await request(`/api/admin/users/${userId}/auth-providers`, {
+  const result = await request(`${ADMIN_USERS_BASE}/${userId}/auth-providers`, {
     method: "POST",
     body: payload,
   });

@@ -14,6 +14,8 @@ import com.java.persistence.entity.DeviceRuntimeStateEntity;
 @Component
 public class LightAutomationPolicy {
 
+    private static final String POWER_CAPABILITY = "POWER";
+
     public List<AutomationDecision> decide(
             Map<String, DeviceRuntimeStateEntity> stateMap,
             ConfigEntity config,
@@ -26,8 +28,8 @@ public class LightAutomationPolicy {
             return decisions;
         }
 
-        boolean currentLightOn = isOn(stateMap.get("light"));
-        // don't change to swtich it cause runtime error
+        boolean currentLightOn = isOn(stateMap.get(POWER_CAPABILITY));
+
         if (mode == SystemMode.auto) {
             if (light == null) {
                 return decisions;

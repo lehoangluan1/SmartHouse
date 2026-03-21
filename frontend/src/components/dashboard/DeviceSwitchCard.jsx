@@ -8,6 +8,13 @@ function DeviceSwitchCard({
   onToggle,
   onIntensityChange,
 }) {
+  const displayIntensity = Number.isFinite(Number(device.intensity))
+    ? Math.max(0, Math.min(100, Number(device.intensity)))
+    : 0;
+
+  const sliderDisabled =
+    disabled || !device.enabled || !device.supportsIntensity;
+
   return (
     <div
       className={`device-switch-card ${selected ? "selected" : ""}`}
@@ -29,10 +36,12 @@ function DeviceSwitchCard({
           <div
             className="device-switch-card__intensity"
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="device-switch-card__intensity-head">
               <span>{device.intensityLabel}</span>
-              <strong>{device.intensity ?? 0}%</strong>
+              <strong>{displayIntensity}%</strong>
             </div>
 
             <input
@@ -40,8 +49,8 @@ function DeviceSwitchCard({
               min="0"
               max="100"
               step="1"
-              value={device.intensity ?? 0}
-              disabled={disabled || !device.enabled}
+              value={displayIntensity}
+              disabled={sliderDisabled}
               className="device-switch-card__slider"
               onChange={(e) => onIntensityChange?.(Number(e.target.value))}
             />

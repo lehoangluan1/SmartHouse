@@ -1,7 +1,9 @@
 import { request, unwrapObject } from "./apiClient";
 
+const AUTH_BASE = "/api/auth";
+
 export async function loginLocal(payload) {
-  const result = await request("/api/auth/login", {
+  const result = await request(`${AUTH_BASE}/login`, {
     method: "POST",
     auth: false,
     body: {
@@ -17,7 +19,7 @@ export async function loginLocal(payload) {
 }
 
 export async function loginGoogle(payload) {
-  const result = await request("/api/auth/login", {
+  const result = await request(`${AUTH_BASE}/login`, {
     method: "POST",
     auth: false,
     body: {
@@ -33,12 +35,10 @@ export async function loginGoogle(payload) {
 }
 
 export async function refreshToken(refreshToken) {
-  const result = await request("/api/auth/refresh", {
+  const result = await request(`${AUTH_BASE}/refresh`, {
     method: "POST",
     auth: false,
-    body: {
-      refreshToken,
-    },
+    body: { refreshToken },
   });
 
   return unwrapObject(result);

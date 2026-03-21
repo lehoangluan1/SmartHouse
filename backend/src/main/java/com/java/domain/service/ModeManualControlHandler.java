@@ -8,6 +8,7 @@ import com.java.controller.dto.ControlRequest;
 import com.java.domain.SystemMode;
 import com.java.mapper.ControlCommandMapper;
 import com.java.persistence.entity.DeviceEntity;
+import com.java.persistence.repo.DeviceRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,9 +20,10 @@ public class ModeManualControlHandler {
     private final DeviceRuntimeStateService deviceRuntimeStateService;
     private final ActivityLogService activityLogService;
     private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
-    private final ModeAutomationService modeAutomationService;
     private final ControlCommandMapper controlCommandMapper;
     private final ManualHoldService manualHoldService;
+    private final DeviceRepository deviceRepository;
+    private final AutoControlService autoControlService;
 
     public ControlCommandResponse handle(
             DeviceEntity device,
@@ -38,6 +40,7 @@ public class ModeManualControlHandler {
             throw new BadRequestException("Device has not yet been assigned to a home so mode cannot be synced");
         }
 
+        Long homeId = device.getHome().getId();
         String modeValue = String.valueOf(normalized.value());
         SystemMode nextMode = deviceTargetPolicy.parseSystemMode(modeValue);
 
@@ -49,15 +52,26 @@ public class ModeManualControlHandler {
         );
 
         deviceRuntimeStateService.syncModeForHome(
-                device.getHome().getId(),
+                homeId,
                 nextMode.name(),
                 "MODE_SYNC",
                 null,
                 null
         );
 
+        if (nextMode == SystemMode.sleep || nextMode == SystemMode.away) {
+            deviceRepository.findByHomeId(homeId).stream()
+                    .filter(this::isLight)
+                    .forEach(light -> autoControlService.execute(
+                            light,
+                            "POWER",
+                            "false",
+                            "MODE_FORCE_LIGHT_OFF"
+                    ));
+        }
+
         activityLogService.log(
-                device.getHome().getId(),
+                homeId,
                 device.getId(),
                 request.actorId(),
                 "MANUAL_CONTROL",
@@ -67,8 +81,6 @@ public class ModeManualControlHandler {
                 activityLogPayloadBuilder.controlPayload("mode", modeValue)
         );
 
-        modeAutomationService.evaluateAllByHome(device.getHome().getId());
-
         return controlCommandMapper.toStatusResponse(
                 device.getId(),
                 "mode",
@@ -77,5 +89,14 @@ public class ModeManualControlHandler {
                 request.actorName(),
                 "SYNCED"
         );
+    }
+
+    private boolean isLight(DeviceEntity device) {
+        return device != null
+                && device.getDeviceClass() != null
+                && "ACTUATOR".equalsIgnoreCase(device.getDeviceClass().name())
+                && device.getSubtype() != null
+                && "LIGHT".equalsIgnoreCase(device.getSubtype().trim())
+                && deviceTargetPolicy.supportsPower(device);
     }
 }

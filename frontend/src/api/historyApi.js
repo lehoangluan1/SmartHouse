@@ -1,36 +1,29 @@
-import { request } from "./apiClient";
+import { request, unwrapArray, unwrapObject } from "./apiClient";
 
-function unwrapApiData(response) {
-  if (response && typeof response === "object" && "data" in response) {
-    return response.data;
-  }
-  return response;
-}
+const DEVICES_BASE = "/api/devices";
+const HOMES_BASE = "/api/homes";
+const TELEMETRY_BASE = "/api/v1/device";
 
 export async function fetchHistoryDevicesByHomeId(homeId) {
-  const response = await request(`/api/devices/home/${homeId}`);
-  const data = unwrapApiData(response);
+  const result = await request(`${DEVICES_BASE}/home/${homeId}`);
+  const data = unwrapObject(result);
 
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (Array.isArray(data?.devices)) {
+  if (data?.devices && Array.isArray(data.devices)) {
     return data.devices;
   }
 
-  return [];
+  return unwrapArray(result);
 }
 
 export async function fetchHistoryActiveConfigByHomeId(homeId) {
-  const response = await request(`/api/homes/${homeId}/configs/active`);
-  return unwrapApiData(response) ?? null;
+  const result = await request(`${HOMES_BASE}/${homeId}/configs/active`);
+  return unwrapObject(result);
 }
 
 export async function fetchHistoryTelemetry(deviceKey, range = "24h") {
-  const response = await request(`/api/v1/device/${deviceKey}/telemetry`, {
+  const result = await request(`${TELEMETRY_BASE}/${deviceKey}/telemetry`, {
     query: { range },
   });
 
-  return unwrapApiData(response) ?? {};
+  return unwrapObject(result) ?? {};
 }

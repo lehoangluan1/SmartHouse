@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.java.config.InvalidTelemetryException;
 import com.java.domain.AlertType;
 import com.java.persistence.entity.SensorDataEntity;
 
@@ -16,11 +17,17 @@ public class AlertPolicyService {
 
     private final TelemetryValidationService telemetryValidationService;
     private final CriticalTemperatureService criticalTemperatureService;
+    private final HighTemperatureDurationService highTemperatureDurationService;
     private final OfflineDetector offlineDetector;
     private final AlertLifecycleService alertLifecycleService;
 
     public boolean isValidTelemetry(SensorDataEntity data) {
-        return telemetryValidationService.isValidTelemetry(data);
+        try {
+            telemetryValidationService.validateOrThrow(data);
+            return true;
+        } catch (InvalidTelemetryException ex) {
+            return false;
+        }
     }
 
     @Transactional
@@ -41,6 +48,11 @@ public class AlertPolicyService {
     @Transactional
     public void handleCriticalTemp(Long deviceId, SensorDataEntity latest) {
         criticalTemperatureService.handleCriticalTemp(deviceId, latest);
+    }
+
+    @Transactional
+    public void handleHighTempDuration(Long deviceId, SensorDataEntity latest) {
+        highTemperatureDurationService.evaluate(deviceId, latest);
     }
 
     public boolean isOffline(Long deviceId, OffsetDateTime lastSeenAt, OffsetDateTime now) {

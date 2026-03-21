@@ -1,29 +1,37 @@
-import { request } from "./apiClient";
+import { request, unwrapArray, unwrapObject } from "./apiClient";
+
+const HOMES_BASE = "/api/homes";
 
 export async function fetchHomeModeSchedules(homeId) {
-  const res = await request(`/api/homes/${homeId}/mode-schedules`);
-  return res?.data || [];
+  const result = await request(`${HOMES_BASE}/${homeId}/mode-schedules`);
+  return unwrapArray(result);
 }
 
 export async function createHomeModeSchedule(homeId, payload) {
-  const res = await request(`/api/homes/${homeId}/mode-schedules`, {
+  const result = await request(`${HOMES_BASE}/${homeId}/mode-schedules`, {
     method: "POST",
     body: payload,
   });
-  return res?.data;
+  return unwrapObject(result);
 }
 
 export async function updateHomeModeSchedule(homeId, scheduleId, payload) {
-  const res = await request(`/api/homes/${homeId}/mode-schedules/${scheduleId}`, {
-    method: "PUT",
-    body: payload,
-  });
-  return res?.data;
+  const result = await request(
+    `${HOMES_BASE}/${homeId}/mode-schedules/${scheduleId}`,
+    {
+      method: "PUT",
+      body: payload,
+    }
+  );
+  return unwrapObject(result);
 }
 
 export async function deleteHomeModeSchedule(homeId, scheduleId) {
-  const res = await request(`/api/homes/${homeId}/mode-schedules/${scheduleId}`, {
-    method: "DELETE",
-  });
-  return res?.data;
+  const result = await request(
+    `${HOMES_BASE}/${homeId}/mode-schedules/${scheduleId}`,
+    {
+      method: "DELETE",
+    }
+  );
+  return unwrapObject(result);
 }

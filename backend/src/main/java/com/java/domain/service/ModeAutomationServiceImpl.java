@@ -105,8 +105,8 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
                 continue;
             }
 
-            autoControlService.autoControl(
-                    device.getId(),
+            autoControlService.execute(
+                    device,
                     decision.target(),
                     decision.value(),
                     decision.reason()

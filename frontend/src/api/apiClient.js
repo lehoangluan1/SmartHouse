@@ -8,8 +8,9 @@ import {
 } from "../utils/authStorage";
 import { refreshToken as refreshTokenApi } from "./authApi";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") || "http://localhost:8080";
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") ||
+  "http://localhost:8080";
 
 export class ApiError extends Error {
   constructor(message, status, payload = null) {
@@ -20,39 +21,58 @@ export class ApiError extends Error {
   }
 }
 
-function getToken() {
+function getAccessToken() {
   return getStoredAccessToken() || "";
 }
 
+function normalizePath(path) {
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
 function buildUrl(path, query) {
-  const url = new URL(`${API_BASE_URL}${path}`);
+  const url = new URL(`${API_BASE_URL}${normalizePath(path)}`);
 
   Object.entries(query || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.append(key, value);
-    }
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.append(key, String(value));
   });
 
   return url.toString();
 }
 
-async function doFetch(path, options = {}, tokenOverride = null) {
-  const { method = "GET", query, body, auth = true, headers = {} } = options;
+async function parseJsonSafely(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
 
-  const token = tokenOverride ?? getToken();
+async function rawRequest(path, options = {}, tokenOverride = null) {
+  const {
+    method = "GET",
+    query,
+    body,
+    auth = true,
+    headers = {},
+    signal,
+  } = options;
+
+  const token = tokenOverride ?? getAccessToken();
+  const hasJsonBody = body !== undefined && body !== null;
 
   const response = await fetch(buildUrl(path, query), {
     method,
+    signal,
     headers: {
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
       ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: hasJsonBody ? JSON.stringify(body) : undefined,
   });
 
-  const json = await response.json().catch(() => null);
-
+  const json = await parseJsonSafely(response);
   return { response, json };
 }
 
@@ -71,16 +91,17 @@ async function refreshAccessToken() {
       const refreshed = await refreshTokenApi(refreshToken);
 
       const session = {
-        accessToken: refreshed.accessToken || "",
-        refreshToken: refreshed.refreshToken || refreshToken,
-        userId: refreshed.userId ?? storedUser?.userId ?? null,
-        username: refreshed.username || storedUser?.username || "",
-        role: refreshed.role || storedUser?.role || "",
-        roleInHome: refreshed.roleInHome || storedUser?.roleInHome || "",
-        status: refreshed.status || storedUser?.status || "",
+        accessToken: refreshed?.accessToken || "",
+        refreshToken: refreshed?.refreshToken || refreshToken,
+        userId: refreshed?.userId ?? storedUser?.userId ?? null,
+        username: refreshed?.username || storedUser?.username || "",
+        role: refreshed?.role || storedUser?.role || "",
+        roleInHome: refreshed?.roleInHome || storedUser?.roleInHome || "",
+        status: refreshed?.status || storedUser?.status || "",
         mustChangePassword:
-          refreshed.mustChangePassword ?? Boolean(storedUser?.mustChangePassword),
-        homeId: refreshed.homeId ?? storedUser?.homeId ?? null,
+          refreshed?.mustChangePassword ??
+          Boolean(storedUser?.mustChangePassword),
+        homeId: refreshed?.homeId ?? storedUser?.homeId ?? null,
       };
 
       saveAuthSession(session);
@@ -93,8 +114,22 @@ async function refreshAccessToken() {
   return refreshPromise;
 }
 
+function resolveErrorMessage(status, payload) {
+  return (
+    payload?.message ||
+    payload?.error ||
+    payload?.details ||
+    `Request failed with status ${status}`
+  );
+}
+
+function handleUnauthorized() {
+  clearAuthSession();
+  dispatchLogoutEvent();
+}
+
 export async function request(path, options = {}) {
-  const first = await doFetch(path, options);
+  const first = await rawRequest(path, options);
 
   if (first.response.ok) {
     return first.json;
@@ -103,38 +138,32 @@ export async function request(path, options = {}) {
   if (first.response.status === 401 && options.auth !== false) {
     try {
       const newAccessToken = await refreshAccessToken();
-      const retry = await doFetch(path, options, newAccessToken);
+      const retry = await rawRequest(path, options, newAccessToken);
 
       if (retry.response.ok) {
         return retry.json;
       }
 
-      const retryMessage =
-        retry.json?.message ||
-        retry.json?.error ||
-        retry.json?.details ||
-        `Request failed with status ${retry.response.status}`;
-
       if (retry.response.status === 401) {
-        clearAuthSession();
-        dispatchLogoutEvent();
+        handleUnauthorized();
       }
 
-      throw new ApiError(retryMessage, retry.response.status, retry.json);
+      throw new ApiError(
+        resolveErrorMessage(retry.response.status, retry.json),
+        retry.response.status,
+        retry.json
+      );
     } catch {
-      clearAuthSession();
-      dispatchLogoutEvent();
+      handleUnauthorized();
       throw new ApiError("Session expired", 401, null);
     }
   }
 
-  const message =
-    first.json?.message ||
-    first.json?.error ||
-    first.json?.details ||
-    `Request failed with status ${first.response.status}`;
-
-  throw new ApiError(message, first.response.status, first.json);
+  throw new ApiError(
+    resolveErrorMessage(first.response.status, first.json),
+    first.response.status,
+    first.json
+  );
 }
 
 export function unwrapData(result) {
@@ -145,14 +174,16 @@ export function unwrapData(result) {
   return result;
 }
 
+export function unwrapObject(result) {
+  const data = unwrapData(result);
+  return data && !Array.isArray(data) ? data : null;
+}
+
 export function unwrapArray(result) {
   const data = unwrapData(result);
   return Array.isArray(data) ? data : [];
 }
 
-export function unwrapObject(result) {
-  const data = unwrapData(result);
-  return Array.isArray(data) ? null : data ?? null;
+export function buildApiUrl(path, query) {
+  return buildUrl(path, query);
 }
-
-export { API_BASE_URL };
