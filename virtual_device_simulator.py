@@ -1,126 +1,188 @@
-# virtual_device_simulator.py
-# Mô phỏng YoLoBit/OhStem nhưng không dùng phần cứng.
-# Registry, config, state, command, telemetry vẫn gọi backend y như file gốc.
-
-import requests
-import random
 import time
 import math
-from datetime import datetime
+import random
+import json
+import gc
+import requests
 
-# ===== SERVER =====
-SERVER_HOST = '192.168.1.175'
+# =========================================================
+# VIRTUAL SMART HOUSE SIMULATOR + PIR + YOLO HUMAN MOTION
+# =========================================================
+
+SERVER_HOST = "192.168.1.20"
 SERVER_PORT = 8080
-BASE = 'http://{}:{}'.format(SERVER_HOST, SERVER_PORT)
+BASE = f"http://{SERVER_HOST}:{SERVER_PORT}"
+
+YOLO_HOST = "127.0.0.1"   # hoặc IP máy chạy YOLO
+YOLO_PORT = 5000
+YOLO_BASE = f"http://{YOLO_HOST}:{YOLO_PORT}"
 
 HOME_ID = 1
-DEVICE_NAME = 'OhStem Living Room'
+DEVICE_NAME = "Virtual OhStem Living Room"
 
 # ===== CONFIG =====
-DOOR_PASSWORD = '123456'
-MAX_FAILED_ATTEMPTS = 3
-DOOR_OPEN_MS = 5000
-
 CFG = {
-    'Thigh': 30.0, 'Tlow': 27.0, 'Lhigh': 55, 'Llow': 35,
-    'Tsleep_high': 32.0, 'Tsleep_low': 26.0, 'Taway_high': 33.0,
-    'Tcritical': 35.0, 'N_minutes': 2, 'M_minutes': 2, 'Thold_minutes': 5,
-    'auto_fan_speed': 70, 'sleep_fan_speed': 30, 'away_fan_speed': 60
+    "Thigh": 30.0,
+    "Tlow": 27.0,
+    "Lhigh": 55,
+    "Llow": 35,
+    "Tsleep_high": 32.0,
+    "Tsleep_low": 26.0,
+    "Taway_high": 33.0,
+    "Tcritical": 35.0,
+    "N_minutes": 2,
+    "M_minutes": 2,
+    "Thold_minutes": 5,
+    "auto_fan_speed": 70,
+    "sleep_fan_speed": 30,
+    "away_fan_speed": 60,
 }
 
+# ===== STATE =====
 SYS = {
-    'mode': 'away', 'prev_mode': None, 'hold_until': None,
-    'fan_status': 'off', 'fan_speed': 0, 'light_status': 'off',
-    'sensor_error': False, 'state_error': False, 'config_error': False,
-    'telemetry_error': False, 'command_error': False, 'registry_error': False,
-    'alert_active': False, 'security_alert_active': False,
-    'nhiet_do': 0, 'do_am': 0, 'shine': 0, 'someone': False,
-    'door_locked': True, 'door_open': False, 'door_open_until': None,
-    'ir_typing': False, 'ir_pass': '', 'failed_attempts': 0,
-    'last_security_alert_ms': 0, 'last_lcd_1': '', 'last_lcd_2': ''
+    "mode": "away",
+    "prev_mode": None,
+    "hold_until": None,
+    "fan_status": "off",
+    "fan_speed": 0,
+    "light_status": "off",
+    "sensor_error": False,
+    "state_error": False,
+    "config_error": False,
+    "telemetry_error": False,
+    "command_error": False,
+    "registry_error": False,
+    "alert_active": False,
+    "security_alert_active": False,
+    "nhiet_do": 0.0,
+    "do_am": 0.0,
+    "shine": 0,
+
+    # Kết quả cuối cùng dùng cho motion sensor telemetry
+    "someone": False,
+
+    # PIR giả lập
+    "pir_motion": False,
+
+    # Camera YOLO
+    "camera_human_detected": False,
+    "camera_human_count": 0,
+    "camera_confidence": 0.0,
+    "camera_motion_detected": False,
+    "camera_motion_score": 0.0,
+    "yolo_error": False,
+
+    "door_locked": True,
+    "door_open": False,
+    "door_open_until": None,
+    "failed_attempts": 0,
+    "last_security_alert_ms": 0,
+    "manual_override": False,
+    "last_gc": 0,
+    "last_wrong_password_alert_ms": 0,
+    "boot_ms": 0,
+    "last_human_seen_ms": 0,
 }
 
+# ===== DEVICE REGISTRY =====
 DEV = {
-    'runtime': None, 'fan': None, 'light': None, 'temp': None,
-    'humidity': None, 'light_sensor': None, 'motion': None
+    "runtime": None,
+    "fan": None,
+    "light": None,
+    "temp": None,
+    "humidity": None,
+    "light_sensor": None,
+    "motion": None,
 }
 
 KEYS = {
-    'runtime_id': None, 'runtime_key': None,
-    'fan_id': None, 'fan_key': None,
-    'light_id': None, 'light_key': None,
-    'temp_key': 'ohstem-temp-01',
-    'humidity_key': 'ohstem-humidity-01',
-    'light_sensor_key': 'ohstem-light-01',
-    'motion_key': 'ohstem-motion-01'
+    "runtime_id": None,
+    "runtime_key": "yolobit-01",
+    "fan_id": None,
+    "fan_key": "ohstem-fan-ctrl-01",
+    "light_id": None,
+    "light_key": "ohstem-light-ctrl-01",
+    "temp_key": "ohstem-temp-01",
+    "humidity_key": "ohstem-humidity-01",
+    "light_sensor_key": "ohstem-light-01",
+    "motion_key": "ohstem-motion-01",
 }
 
 DEVICE_RULES = {
-    'runtime': {
-        'exact': ['yolobit-01'],
-        'type': ['SENSOR_NODE', 'HUB', 'OTHER', 'CONTROLLER'],
-        'key': ['yolobit', 'controller', 'hub'],
-        'name': ['controller', 'hub', 'trung tam', 'điều khiển', 'dieu khien']
+    "runtime": {
+        "exact": ["yolobit-01"],
+        "type": ["SENSOR_NODE", "HUB", "OTHER"],
+        "key": ["yolobit", "controller", "hub"],
+        "name": ["controller", "hub", "trung tam"],
     },
-    'fan': {
-        'exact': ['ohstem-fan-ctrl-01'],
-        'type': ['FAN'],
-        'key': ['fan', 'quat'],
-        'name': ['fan', 'quạt', 'quat']
+    "fan": {
+        "exact": ["ohstem-fan-ctrl-01"],
+        "type": ["FAN"],
+        "key": ["fan", "quat"],
+        "name": ["fan", "quạt"],
     },
-    'light': {
-        'exact': ['ohstem-light-ctrl-01'],
-        'type': ['LIGHT'],
-        'key': ['light', 'den'],
-        'name': ['light', 'đèn', 'den']
+    "light": {
+        "exact": ["ohstem-light-ctrl-01"],
+        "type": ["LIGHT"],
+        "key": ["light", "den"],
+        "name": ["light", "đèn"],
     },
-    'temp': {
-        'exact': ['ohstem-temp-01'],
-        'key': ['temp', 'temperature', 'nhiet'],
-        'name': ['temp', 'temperature', 'nhiệt', 'nhiet']
+    "temp": {
+        "exact": ["ohstem-temp-01"],
+        "key": ["temp", "temperature"],
+        "name": ["temp", "temperature"],
     },
-    'humidity': {
-        'exact': ['ohstem-humidity-01'],
-        'key': ['humidity', 'humid', 'do-am'],
-        'name': ['humidity', 'humid', 'độ ẩm', 'do am']
+    "humidity": {
+        "exact": ["ohstem-humidity-01"],
+        "key": ["humidity", "do-am"],
+        "name": ["humidity", "độ ẩm"],
     },
-    'light_sensor': {
-        'exact': ['ohstem-light-01']
+    "light_sensor": {
+        "exact": ["ohstem-light-01"],
     },
-    'motion': {
-        'exact': ['ohstem-motion-01'],
-        'key': ['motion', 'pir', 'presence'],
-        'name': ['motion', 'pir', 'hiện diện', 'hien dien', 'chuyển động', 'chuyen dong']
-    }
+    "motion": {
+        "exact": ["ohstem-motion-01"],
+        "key": ["motion", "pir"],
+        "name": ["motion", "chuyển động"],
+    },
 }
 
-# ===== UTILS =====
-def unwrap(x):
-    return x.get('data') if isinstance(x, dict) and 'data' in x else x
+
+# =========================================================
+# UTILS
+# =========================================================
+def now_ms():
+    return int(time.time() * 1000)
+
 
 def clamp(v, a, b):
     return a if v < a else b if v > b else v
 
+
 def to_int(v, d=0):
     try:
         return int(v)
-    except Exception:
+    except:
         try:
             return int(float(v))
-        except Exception:
+        except:
             return d
+
 
 def to_float(v, d=0.0):
     try:
         return float(v)
-    except Exception:
+    except:
         return d
 
+
 def norm(v):
-    return '' if v is None else str(v).strip().lower()
+    return "" if v is None else str(v).strip().lower()
+
 
 def norm_type(v):
-    return '' if v is None else str(v).strip().upper()
+    return "" if v is None else str(v).strip().upper()
+
 
 def contains(text, keys):
     t = norm(text)
@@ -129,537 +191,724 @@ def contains(text, keys):
             return True
     return False
 
+
 def has_server_error():
     return (
-        SYS['state_error']
-        or SYS['config_error']
-        or SYS['telemetry_error']
-        or SYS['command_error']
-        or SYS['registry_error']
+        SYS["state_error"]
+        or SYS["config_error"]
+        or SYS["telemetry_error"]
+        or SYS["command_error"]
+        or SYS["registry_error"]
     )
 
-def http_get(path):
+
+def unwrap(x):
+    return x.get("data") if isinstance(x, dict) and "data" in x else x
+
+
+def http_get(path, timeout=5):
     try:
-        resp = requests.get(BASE + path, timeout=10)
-        try:
-            data = resp.json()
-        except Exception:
-            print('GET JSON loi:', path, resp.text)
-            return None
-        return unwrap(data)
+        resp = requests.get(BASE + path, timeout=timeout)
+        if 200 <= resp.status_code < 300:
+            try:
+                return unwrap(resp.json())
+            except:
+                return None
+        return None
     except Exception as e:
-        print('GET loi', path, e)
+        print(f"[GET FAIL] {path}: {e}")
         return None
 
-def http_post(path, payload):
+
+def http_post(path, payload, timeout=5):
     try:
-        resp = requests.post(BASE + path, json=payload, timeout=10)
+        resp = requests.post(BASE + path, json=payload, timeout=timeout)
         ok = 200 <= resp.status_code < 300
-        return ok, resp.text
+        text = resp.text
+        if not ok:
+            print(f"[POST FAIL] {path}: {resp.status_code} {text}")
+        return ok, text
     except Exception as e:
-        print('POST loi', path, e)
+        print(f"[POST FAIL] {path}: {e}")
         return False, None
 
-# ===== HARDWARE MOCK =====
+
+def yolo_get(path, timeout=2):
+    try:
+        resp = requests.get(YOLO_BASE + path, timeout=timeout)
+        if 200 <= resp.status_code < 300:
+            return resp.json()
+        print(f"[YOLO FAIL] {path}: {resp.status_code} {resp.text}")
+        return None
+    except Exception as e:
+        print(f"[YOLO FAIL] {path}: {e}")
+        return None
+
+
+# =========================================================
+# VIRTUAL HARDWARE
+# =========================================================
 def batquat(on, speed):
-    print('[MOCK FAN]', 'ON' if on else 'OFF', 'speed=', speed)
+    print(f"[VIRTUAL FAN] {'ON' if on else 'OFF'} speed={speed}")
+
 
 def batden(on):
-    print('[MOCK LIGHT]', 'ON' if on else 'OFF')
+    print(f"[VIRTUAL LIGHT] {'ON' if on else 'OFF'}")
+
 
 def set_door_relay(is_open):
-    print('[MOCK DOOR RELAY]', 'OPEN' if is_open else 'CLOSE')
+    print(f"[VIRTUAL DOOR RELAY] {'OPEN' if is_open else 'CLOSE'}")
 
-def update_lcd():
-    t = '--' if SYS['nhiet_do'] is None else str(round(SYS['nhiet_do'], 1))
-    h = '--' if SYS['do_am'] is None else str(round(SYS['do_am'], 1))
-    l = '--' if SYS['shine'] is None else str(SYS['shine'])
-    print('[MOCK LCD]', 'T:', t, 'H:', h, 'L:', l,
-          'mode=', SYS['mode'],
-          'door_locked=', SYS['door_locked'],
-          'door_open=', SYS['door_open'])
 
-def update_status_leds():
-    print('[MOCK LED]',
-          'sensor_error=', SYS['sensor_error'],
-          'server_error=', has_server_error(),
-          'alert=', SYS['alert_active'],
-          'security_alert=', SYS['security_alert_active'])
-
-def process_ir():
-    # Không xử lý IR thật trên simulator để tránh lỗi thiết bị
-    return
-
-# ===== DOOR =====
 def open_door():
-    SYS['door_open'] = True
-    SYS['door_locked'] = False
-    SYS['door_open_until'] = time.time() + (DOOR_OPEN_MS / 1000.0)
-    set_door_relay(True)
+    SYS["door_open"] = True
+    SYS["door_locked"] = False
+    SYS["door_open_until"] = now_ms() + 5000
+    print("[VIRTUAL DOOR] OPEN")
+
 
 def close_door():
-    SYS['door_open'] = False
-    SYS['door_locked'] = True
-    SYS['door_open_until'] = None
-    SYS['ir_typing'] = False
-    SYS['ir_pass'] = ''
-    set_door_relay(False)
+    SYS["door_open"] = False
+    SYS["door_locked"] = True
+    SYS["door_open_until"] = None
+    print("[VIRTUAL DOOR] CLOSE")
+
 
 def update_door_auto_close():
-    if SYS['door_open'] and SYS['door_open_until'] is not None:
-        if time.time() >= SYS['door_open_until']:
+    if SYS["door_open"] and SYS["door_open_until"] is not None:
+        if now_ms() >= SYS["door_open_until"]:
             close_door()
 
-# ===== DEVICE REGISTRY =====
+
+# =========================================================
+# REGISTRY
+# =========================================================
 def device_match(d, rule):
     if d is None or rule is None:
         return False
-    if 'type' in rule and norm_type(d.get('type') or d.get('class') or d.get('subtype')) in rule['type']:
+    if "type" in rule and norm_type(d.get("type")) in rule["type"]:
         return True
-    if 'key' in rule and contains(d.get('deviceKey') or d.get('device_key'), rule['key']):
+    if "key" in rule and contains(d.get("deviceKey"), rule["key"]):
         return True
-    if 'name' in rule and contains(d.get('name'), rule['name']):
+    if "name" in rule and contains(d.get("name"), rule["name"]):
         return True
     return False
 
-def get_device_key(d):
-    return d.get('deviceKey') or d.get('device_key')
 
 def find_exact(devices, keys):
     keys = [norm(k) for k in keys]
     for d in devices:
-        if norm(get_device_key(d)) in keys:
+        if norm(d.get("deviceKey")) in keys:
             return d
     return None
 
+
 def find_by_rule(devices, name):
     rule = DEVICE_RULES.get(name, {})
-    d = find_exact(devices, rule.get('exact', []))
+    d = find_exact(devices, rule.get("exact", []))
     if d is not None:
         return d
     for x in devices:
         if device_match(x, rule):
-            if name == 'light_sensor' and norm(get_device_key(x)) == 'ohstem-light-01':
+            if name == "light_sensor" and norm(x.get("deviceKey")) == "ohstem-light-01":
                 return x
-            if name != 'light_sensor':
+            if name != "light_sensor":
                 return x
-    return devices[0] if name == 'runtime' and devices else None
+    return devices[0] if name == "runtime" and devices else None
+
 
 def load_device_registry():
-    data = http_get('/api/devices/home/' + str(HOME_ID))
+    data = http_get(f"/api/devices/home/{HOME_ID}")
     if not isinstance(data, list) or not data:
-        SYS['registry_error'] = True
-        print('Registry invalid:', data)
+        print("[REGISTRY] Không load được từ server, dùng key local")
+        SYS["registry_error"] = True
         return False
 
-    DEV['runtime'] = find_by_rule(data, 'runtime')
-    DEV['fan'] = find_by_rule(data, 'fan')
-    DEV['light'] = find_by_rule(data, 'light')
-    DEV['temp'] = find_by_rule(data, 'temp')
-    DEV['humidity'] = find_by_rule(data, 'humidity')
-    DEV['light_sensor'] = find_by_rule(data, 'light_sensor')
-    DEV['motion'] = find_by_rule(data, 'motion')
+    DEV["runtime"] = find_by_rule(data, "runtime")
+    DEV["fan"] = find_by_rule(data, "fan")
+    DEV["light"] = find_by_rule(data, "light")
+    DEV["temp"] = find_by_rule(data, "temp")
+    DEV["humidity"] = find_by_rule(data, "humidity")
+    DEV["light_sensor"] = find_by_rule(data, "light_sensor")
+    DEV["motion"] = find_by_rule(data, "motion")
 
-    if DEV['runtime'] is None or DEV['fan'] is None or DEV['light'] is None:
-        SYS['registry_error'] = True
-        print('Registry thieu device bat buoc')
-        return False
+    if DEV["runtime"]:
+        KEYS["runtime_id"] = DEV["runtime"].get("id")
+        KEYS["runtime_key"] = DEV["runtime"].get("deviceKey") or KEYS["runtime_key"]
+    if DEV["fan"]:
+        KEYS["fan_id"] = DEV["fan"].get("id")
+        KEYS["fan_key"] = DEV["fan"].get("deviceKey") or KEYS["fan_key"]
+    if DEV["light"]:
+        KEYS["light_id"] = DEV["light"].get("id")
+        KEYS["light_key"] = DEV["light"].get("deviceKey") or KEYS["light_key"]
+    if DEV["temp"]:
+        KEYS["temp_key"] = DEV["temp"].get("deviceKey") or KEYS["temp_key"]
+    if DEV["humidity"]:
+        KEYS["humidity_key"] = DEV["humidity"].get("deviceKey") or KEYS["humidity_key"]
+    if DEV["light_sensor"]:
+        KEYS["light_sensor_key"] = DEV["light_sensor"].get("deviceKey") or KEYS["light_sensor_key"]
+    if DEV["motion"]:
+        KEYS["motion_key"] = DEV["motion"].get("deviceKey") or KEYS["motion_key"]
 
-    KEYS['runtime_id'] = DEV['runtime'].get('id')
-    KEYS['runtime_key'] = get_device_key(DEV['runtime'])
-
-    KEYS['fan_id'] = DEV['fan'].get('id')
-    KEYS['fan_key'] = get_device_key(DEV['fan'])
-
-    KEYS['light_id'] = DEV['light'].get('id')
-    KEYS['light_key'] = get_device_key(DEV['light'])
-
-    if DEV['temp']:
-        KEYS['temp_key'] = get_device_key(DEV['temp'])
-    if DEV['humidity']:
-        KEYS['humidity_key'] = get_device_key(DEV['humidity'])
-    if DEV['light_sensor']:
-        KEYS['light_sensor_key'] = get_device_key(DEV['light_sensor'])
-    if DEV['motion']:
-        KEYS['motion_key'] = get_device_key(DEV['motion'])
-
-    SYS['registry_error'] = False
-    print('registry ok', KEYS)
+    SYS["registry_error"] = False
+    print("[REGISTRY] Loaded")
+    print(json.dumps(KEYS, indent=2, ensure_ascii=False))
     return True
 
-# ===== ALERT =====
+
+# =========================================================
+# ALERT
+# =========================================================
 def send_security_alert(reason, detail):
-    if KEYS['runtime_id'] is None:
-        print('Bo qua security alert do chua co registry')
-        return
     payload = {
-        "deviceId": KEYS['runtime_id'],
+        "deviceId": KEYS["runtime_id"],
         "sensorId": None,
         "type": reason,
-        "message": detail
+        "message": detail,
     }
-    success, text = http_post('/api/homes/' + str(HOME_ID) + '/alerts', payload)
-    print('security alert', 'ok' if success else 'fail', text)
+    success, _ = http_post(f"/api/homes/{HOME_ID}/alerts", payload)
+    print(f"[ALERT] {reason} | {detail} | success={success}")
+    return success
 
-def trigger_security_alert(reason, detail):
-    SYS['security_alert_active'] = True
-    SYS['last_security_alert_ms'] = int(time.time() * 1000)
-    print('SECURITY ALERT:', reason, detail)
-    send_security_alert(reason, detail)
+
+def trigger_wrong_password_alert_periodic():
+    current = now_ms()
+    if current - SYS["last_wrong_password_alert_ms"] >= 5000:
+        SYS["last_wrong_password_alert_ms"] = current
+        SYS["failed_attempts"] += 1
+        SYS["security_alert_active"] = True
+        SYS["last_security_alert_ms"] = current
+        send_security_alert(
+            "WRONG_PASSWORD",
+            f"[VIRTUAL TEST] Nhập sai mật khẩu mô phỏng lần {SYS['failed_attempts']}",
+        )
+
 
 def clear_security_alert_if_needed():
-    if SYS['security_alert_active']:
-        now_ms = int(time.time() * 1000)
-        if now_ms - SYS['last_security_alert_ms'] >= 15000:
-            SYS['security_alert_active'] = False
+    if SYS["security_alert_active"] and (now_ms() - SYS["last_security_alert_ms"] >= 15000):
+        SYS["security_alert_active"] = False
 
-# ===== SENSOR FAKE DATA =====
-_start = time.time()
-_last_motion_flip = time.time()
 
-def fake_temperature():
-    elapsed = time.time() - _start
-    base = 29.0 + 2.7 * math.sin(elapsed / 25.0)
-    noise = random.uniform(-0.3, 0.3)
-    return round(base + noise, 2)
+def send_temperature_alert_if_needed():
+    if SYS["nhiet_do"] is not None and SYS["nhiet_do"] > CFG["Tcritical"]:
+        send_security_alert(
+            "HIGH_TEMPERATURE",
+            f"[VIRTUAL TEST] Nhiệt độ cao: {round(SYS['nhiet_do'], 1)}°C",
+        )
 
-def fake_humidity():
-    elapsed = time.time() - _start
-    base = 68.0 + 7.0 * math.sin(elapsed / 35.0 + 1.2)
-    noise = random.uniform(-1.0, 1.0)
-    return round(clamp(base + noise, 40, 90), 2)
 
-def fake_light():
-    elapsed = time.time() - _start
-    base = 48.0 + 30.0 * math.sin(elapsed / 20.0 - 0.7)
-    noise = random.uniform(-4.0, 4.0)
-    return int(clamp(round(base + noise), 0, 100))
+# =========================================================
+# SENSOR SIMULATION
+# =========================================================
+def read_sensor_virtual():
+    elapsed = (now_ms() - SYS["boot_ms"]) / 1000.0
 
-def fake_motion():
-    global _last_motion_flip
-    if time.time() - _last_motion_flip > random.uniform(6, 15):
-        _last_motion_flip = time.time()
-        return random.choice([True, False, False, False, True])
-    return SYS['someone']
+    temp = 31 + 5 * math.sin(elapsed / 8.0) + random.uniform(-0.5, 0.5)
+    hum = 65 + 12 * math.sin(elapsed / 11.0 + 1.2) + random.uniform(-1.0, 1.0)
+    light = 50 + 40 * math.sin(elapsed / 6.0 + 0.4)
 
-def read_sensor():
-    try:
-        SYS['nhiet_do'] = fake_temperature()
-        SYS['do_am'] = fake_humidity()
-        SYS['shine'] = fake_light()
-        SYS['someone'] = fake_motion()
-    except Exception as e:
-        print('Loi fake sensor:', e)
-        SYS['nhiet_do'] = None
-        SYS['do_am'] = None
-        SYS['shine'] = None
-        SYS['someone'] = False
+    # PIR giả lập
+    pir_motion = (int(elapsed) % 12) in [2, 3, 8, 9]
+
+    SYS["nhiet_do"] = round(clamp(temp, 20, 45), 1)
+    SYS["do_am"] = round(clamp(hum, 30, 95), 1)
+    SYS["shine"] = int(clamp(light, 0, 100))
+    SYS["pir_motion"] = bool(pir_motion)
+
+
+def update_camera_from_yolo():
+    data = yolo_get("/check_human", timeout=2)
+
+    if not isinstance(data, dict) or data.get("status") != "success":
+        SYS["yolo_error"] = True
+        SYS["camera_human_detected"] = False
+        SYS["camera_human_count"] = 0
+        SYS["camera_confidence"] = 0.0
+        SYS["camera_motion_detected"] = False
+        SYS["camera_motion_score"] = 0.0
+        return
+
+    SYS["yolo_error"] = False
+    SYS["camera_human_detected"] = bool(data.get("human_detected", False))
+    SYS["camera_human_count"] = to_int(data.get("human_count", 0), 0)
+    SYS["camera_confidence"] = to_float(data.get("max_confidence", 0.0), 0.0)
+    SYS["camera_motion_detected"] = bool(data.get("motion_detected", False))
+    SYS["camera_motion_score"] = to_float(data.get("movement_score", 0.0), 0.0)
+
+
+def combine_motion_sources():
+    pir_motion = bool(SYS.get("pir_motion", False))
+    human_detected = bool(SYS.get("camera_human_detected", False))
+    camera_motion = bool(SYS.get("camera_motion_detected", False))
+    confidence = to_float(SYS.get("camera_confidence", 0.0), 0.0)
+
+    # Rule cân bằng:
+    # - camera thấy người đang chuyển động => có người
+    # - PIR báo + camera thấy người đủ tin cậy => có người
+    active = camera_motion or (pir_motion and human_detected and confidence >= 0.5)
+
+    if active:
+        SYS["someone"] = True
+        SYS["last_human_seen_ms"] = now_ms()
+    else:
+        if now_ms() - SYS.get("last_human_seen_ms", 0) > 3000:
+            SYS["someone"] = False
+
 
 def sensor_is_valid():
-    t, h, l = SYS['nhiet_do'], SYS['do_am'], SYS['shine']
-    return not (t is None or h is None or l is None or t < -10 or t > 80 or h < 0 or h > 100 or l < 0 or l > 100)
+    t, h, l = SYS["nhiet_do"], SYS["do_am"], SYS["shine"]
+    return not (
+        t is None or h is None or l is None or
+        t < -10 or t > 80 or
+        h < 0 or h > 100 or
+        l < 0 or l > 100
+    )
 
-# ===== STATE / CONFIG =====
+
+# =========================================================
+# STATE / CONFIG
+# =========================================================
 def fetch_state_by_device_id(device_id):
-    return None if device_id is None else http_get('/api/devices/' + str(device_id) + '/state')
+    return None if device_id is None else http_get(f"/api/devices/{device_id}/state")
+
 
 def fetch_device_state():
+    if SYS.get("manual_override"):
+        return
+
     ok_all = True
 
-    s = fetch_state_by_device_id(KEYS['runtime_id'])
-    if isinstance(s, dict):
-        if s.get('mode') is not None:
-            SYS['mode'] = str(s.get('mode')).lower()
-        SYS['hold_until'] = s.get('holdUntil')
-        SYS['prev_mode'] = s.get('prevMode')
-    else:
-        ok_all = False
+    if KEYS["runtime_id"] is not None:
+        s = fetch_state_by_device_id(KEYS["runtime_id"])
+        if isinstance(s, dict):
+            if s.get("mode") is not None:
+                SYS["mode"] = str(s.get("mode")).lower()
+            SYS["hold_until"] = s.get("holdUntil")
+            SYS["prev_mode"] = s.get("prevMode")
+        else:
+            ok_all = False
 
-    s = fetch_state_by_device_id(KEYS['fan_id'])
-    if isinstance(s, dict):
-        if s.get('fanStatus') is not None:
-            SYS['fan_status'] = str(s.get('fanStatus')).lower()
-        if s.get('fanSpeed') is not None:
-            SYS['fan_speed'] = clamp(to_int(s.get('fanSpeed'), SYS['fan_speed']), 0, 100)
-    else:
-        ok_all = False
+    if KEYS["fan_id"] is not None:
+        s = fetch_state_by_device_id(KEYS["fan_id"])
+        if isinstance(s, dict):
+            if s.get("fanStatus") is not None:
+                SYS["fan_status"] = str(s.get("fanStatus")).lower()
+            if s.get("fanSpeed") is not None:
+                SYS["fan_speed"] = clamp(to_int(s.get("fanSpeed"), SYS["fan_speed"]), 0, 100)
+        else:
+            ok_all = False
 
-    s = fetch_state_by_device_id(KEYS['light_id'])
-    if isinstance(s, dict):
-        if s.get('lightStatus') is not None:
-            SYS['light_status'] = str(s.get('lightStatus')).lower()
-    else:
-        ok_all = False
+    if KEYS["light_id"] is not None:
+        s = fetch_state_by_device_id(KEYS["light_id"])
+        if isinstance(s, dict):
+            if s.get("lightStatus") is not None:
+                SYS["light_status"] = str(s.get("lightStatus")).lower()
+        else:
+            ok_all = False
 
-    SYS['state_error'] = not ok_all
+    SYS["state_error"] = not ok_all
+
 
 def fetch_config():
-    data = http_get('/api/homes/' + str(HOME_ID) + '/configs')
+    data = http_get(f"/api/homes/{HOME_ID}/configs")
     if not isinstance(data, dict):
-        SYS['config_error'] = True
-        print('config invalid:', data)
+        SYS["config_error"] = True
         return
 
     map_cfg = {
-        'thigh': ('Thigh', to_float), 'tlow': ('Tlow', to_float),
-        'lhigh': ('Lhigh', to_int), 'llow': ('Llow', to_int),
-        'tsleepHigh': ('Tsleep_high', to_float), 'tsleepLow': ('Tsleep_low', to_float),
-        'tawayHigh': ('Taway_high', to_float), 'tcritical': ('Tcritical', to_float),
-        'nMinutes': ('N_minutes', to_int), 'mMinutes': ('M_minutes', to_int),
-        'tholdMinutes': ('Thold_minutes', to_int),
-        'autoFanSpeed': ('auto_fan_speed', to_int),
-        'sleepFanSpeed': ('sleep_fan_speed', to_int),
-        'awayFanSpeed': ('away_fan_speed', to_int)
+        "thigh": ("Thigh", to_float),
+        "tlow": ("Tlow", to_float),
+        "lhigh": ("Lhigh", to_int),
+        "llow": ("Llow", to_int),
+        "tsleepHigh": ("Tsleep_high", to_float),
+        "tsleepLow": ("Tsleep_low", to_float),
+        "tawayHigh": ("Taway_high", to_float),
+        "tcritical": ("Tcritical", to_float),
+        "nMinutes": ("N_minutes", to_int),
+        "mMinutes": ("M_minutes", to_int),
+        "tholdMinutes": ("Thold_minutes", to_int),
+        "autoFanSpeed": ("auto_fan_speed", to_int),
+        "sleepFanSpeed": ("sleep_fan_speed", to_int),
+        "awayFanSpeed": ("away_fan_speed", to_int),
     }
 
     for k, rule in map_cfg.items():
         name, caster = rule
         if k in data and data[k] is not None:
             v = caster(data[k], CFG[name])
-            CFG[name] = clamp(v, 0, 100) if 'Speed' in name else v
+            CFG[name] = clamp(v, 0, 100) if "Speed" in name else v
 
-    SYS['config_error'] = False
+    SYS["config_error"] = False
+    print("[CONFIG] Updated")
 
-# ===== MODE LOGIC =====
+
+# =========================================================
+# MODE LOGIC
+# =========================================================
 def apply_mode_logic():
     if not sensor_is_valid():
-        SYS['sensor_error'] = True
-        SYS['alert_active'] = False
-        SYS['fan_status'], SYS['fan_speed'], SYS['light_status'] = 'off', 0, 'off'
-        batquat(False, 0)
-        batden(False)
+        SYS["sensor_error"] = True
+        SYS["alert_active"] = False
+        SYS["fan_status"] = "off"
+        SYS["fan_speed"] = 0
+        SYS["light_status"] = "off"
         return
 
-    SYS['sensor_error'] = False
-    if SYS['fan_status'] not in ['on', 'off']:
-        SYS['fan_status'] = 'off'
-    if SYS['light_status'] not in ['on', 'off']:
-        SYS['light_status'] = 'off'
-    SYS['fan_speed'] = clamp(to_int(SYS['fan_speed'], 0), 0, 100)
+    SYS["sensor_error"] = False
 
-    if SYS['mode'] != 'manual':
-        fan_status, fan_speed, light_status = 'off', 0, 'off'
-        t, l = SYS['nhiet_do'], SYS['shine']
+    if SYS["fan_status"] not in ["on", "off"]:
+        SYS["fan_status"] = "off"
+    if SYS["light_status"] not in ["on", "off"]:
+        SYS["light_status"] = "off"
 
-        if SYS['mode'] == 'sleep':
-            if t is not None and t >= CFG['Tsleep_high']:
-                fan_status, fan_speed = 'on', CFG['sleep_fan_speed']
-            elif t is not None and t <= CFG['Tsleep_low']:
-                fan_status, fan_speed = 'off', 0
+    SYS["fan_speed"] = clamp(to_int(SYS["fan_speed"], 0), 0, 100)
 
-        elif SYS['mode'] == 'away':
-            if t is not None and t >= CFG['Taway_high']:
-                fan_status, fan_speed = 'on', CFG['away_fan_speed']
+    if SYS["mode"] != "manual":
+        fan_status, fan_speed, light_status = "off", 0, "off"
+        t = SYS["nhiet_do"]
+        l = SYS["shine"]
+
+        if SYS["mode"] == "sleep":
+            if t is not None and t >= CFG["Tsleep_high"]:
+                fan_status, fan_speed = "on", CFG["sleep_fan_speed"]
+            elif t is not None and t <= CFG["Tsleep_low"]:
+                fan_status, fan_speed = "off", 0
+
+        elif SYS["mode"] == "away":
+            if t is not None and t >= CFG["Taway_high"]:
+                fan_status, fan_speed = "on", CFG["away_fan_speed"]
 
         else:
-            if t is not None and t >= CFG['Thigh']:
-                fan_status, fan_speed = 'on', CFG['auto_fan_speed']
-            elif t is not None and t <= CFG['Tlow']:
-                fan_status, fan_speed = 'off', 0
+            if t is not None and t >= CFG["Thigh"]:
+                fan_status, fan_speed = "on", CFG["auto_fan_speed"]
+            elif t is not None and t <= CFG["Tlow"]:
+                fan_status, fan_speed = "off", 0
 
-            if l is not None and l <= CFG['Llow']:
-                light_status = 'on'
-            elif l is not None and l >= CFG['Lhigh']:
-                light_status = 'off'
+            if l is not None and l <= CFG["Llow"]:
+                light_status = "on"
+            elif l is not None and l >= CFG["Lhigh"]:
+                light_status = "off"
 
-        SYS['fan_status'], SYS['fan_speed'], SYS['light_status'] = fan_status, fan_speed, light_status
+        SYS["fan_status"] = fan_status
+        SYS["fan_speed"] = fan_speed
+        SYS["light_status"] = light_status
 
-    if SYS['fan_status'] == 'on' and SYS['fan_speed'] <= 0:
-        SYS['fan_speed'] = (
-            CFG['sleep_fan_speed'] if SYS['mode'] == 'sleep'
-            else CFG['away_fan_speed'] if SYS['mode'] == 'away'
-            else CFG['auto_fan_speed']
+    if SYS["fan_status"] == "on" and SYS["fan_speed"] <= 0:
+        SYS["fan_speed"] = (
+            CFG["sleep_fan_speed"] if SYS["mode"] == "sleep"
+            else CFG["away_fan_speed"] if SYS["mode"] == "away"
+            else CFG["auto_fan_speed"]
         )
 
-    batquat(SYS['fan_status'] == 'on', SYS['fan_speed'] if SYS['fan_status'] == 'on' else 0)
-    batden(SYS['light_status'] == 'on')
+    batquat(SYS["fan_status"] == "on", SYS["fan_speed"] if SYS["fan_status"] == "on" else 0)
+    batden(SYS["light_status"] == "on")
 
-    temp_critical = SYS['nhiet_do'] is not None and SYS['nhiet_do'] > CFG['Tcritical']
-    away_motion = SYS['mode'] == 'away' and SYS['someone']
-    SYS['alert_active'] = temp_critical or away_motion or SYS['security_alert_active']
+    temp_critical = SYS["nhiet_do"] is not None and SYS["nhiet_do"] > CFG["Tcritical"]
+    away_motion = SYS["mode"] == "away" and SYS["someone"]
+    SYS["alert_active"] = temp_critical or away_motion or SYS["security_alert_active"]
 
-# ===== TELEMETRY =====
+
+# =========================================================
+# TELEMETRY
+# =========================================================
+TELEMETRY_ITEMS = [
+    ("temp_key", "temperature", "nhiet_do"),
+    ("humidity_key", "humidity", "do_am"),
+    ("light_sensor_key", "light", "shine"),
+    ("motion_key", "motion", "someone"),
+]
+
+telemetry_cursor = 0
+
+
 def send_one_telemetry(device_key, sensor_type, value):
-    payload = {"deviceKey": device_key, "sensorType": sensor_type, "value": value}
-    success, text = http_post('/api/device-telemetry', payload)
-    SYS['telemetry_error'] = not success
-    print('telemetry', sensor_type, 'ok' if success else 'fail', text)
+    payload = {
+        "deviceKey": device_key,
+        "sensorType": sensor_type,
+        "value": value,
+    }
+    success, _ = http_post("/api/device-telemetry", payload)
+    SYS["telemetry_error"] = not success
+    print(f"[TELEMETRY] {sensor_type}={value} key={device_key} success={success}")
+    return success
 
-def send_telemetry():
-    items = [
-        (KEYS['temp_key'], 'temperature', SYS['nhiet_do']),
-        (KEYS['humidity_key'], 'humidity', SYS['do_am']),
-        (KEYS['light_sensor_key'], 'light', SYS['shine']),
-        (KEYS['motion_key'], 'motion', bool(SYS['someone']))
-    ]
-    for device_key, sensor_type, value in items:
-        if value is not None:
-            send_one_telemetry(device_key, sensor_type, value)
 
-# ===== COMMAND =====
+def send_next_telemetry():
+    global telemetry_cursor
+    total = len(TELEMETRY_ITEMS)
+
+    for _ in range(total):
+        key_name, sensor_type, sys_key = TELEMETRY_ITEMS[telemetry_cursor]
+        telemetry_cursor = (telemetry_cursor + 1) % total
+
+        device_key = KEYS.get(key_name)
+        value = SYS.get(sys_key)
+        if sys_key == "someone":
+            value = bool(value)
+
+        if device_key is not None and value is not None:
+            return send_one_telemetry(device_key, sensor_type, value)
+
+    return False
+
+
+# =========================================================
+# COMMAND
+# =========================================================
+def normalize_target(t):
+    t = norm(t).replace("-", "_")
+    return {
+        "fanstatus": "fan",
+        "fanspeed": "fan_speed",
+        "lightstatus": "light",
+        "lightlevel": "light_level",
+    }.get(t, t)
+
+
 def fetch_next_command(device_key):
     if device_key is None:
         return None
-    data = http_get('/api/v1/device/' + device_key + '/commands/next')
-    return data if isinstance(data, dict) and data.get('id') is not None else None
+    data = http_get(f"/api/v1/device/{device_key}/commands/next")
+    return data if isinstance(data, dict) and data.get("id") is not None else None
+
 
 def ack_command(device_key, command_id):
     if device_key is None or command_id is None:
         return False
-    success, text = http_post('/api/v1/device/' + device_key + '/commands/ack', {"id": command_id})
-    print('ack', device_key, 'ok' if success else 'fail', text)
+    success, _ = http_post(f"/api/v1/device/{device_key}/commands/ack", {"id": command_id})
     return success
 
-def normalize_target(t):
-    t = norm(t).replace('-', '_')
-    return {
-        'fanstatus': 'fan', 'fan_status': 'fan',
-        'fanspeed': 'fan_speed', 'fan_speed': 'fan_speed',
-        'lightstatus': 'light', 'light_status': 'light',
-        'lightlevel': 'light_level', 'light_level': 'light_level'
-    }.get(t, t)
 
 def process_runtime_command(cmd):
-    cid, target, value = cmd.get('id'), normalize_target(cmd.get('target')), cmd.get('value')
+    cid = cmd.get("id")
+    target = normalize_target(cmd.get("target"))
+    value = cmd.get("value")
+
     if cid is None:
         return False
 
-    print('[MOCK COMMAND runtime]', cmd)
+    if target == "mode" and value is not None:
+        SYS["prev_mode"] = SYS["mode"]
+        SYS["mode"] = str(value).lower()
+        if SYS["mode"] != "manual":
+            SYS["manual_override"] = False
 
-    if target == 'mode' and value is not None:
-        SYS['prev_mode'] = SYS['mode']
-        SYS['mode'] = str(value).lower()
+    print(f"[CMD RUNTIME] {cmd}")
+    return ack_command(KEYS["runtime_key"], cid)
 
-    return ack_command(KEYS['runtime_key'], cid)
 
 def process_fan_command(cmd):
-    cid, target, value = cmd.get('id'), normalize_target(cmd.get('target')), cmd.get('value')
+    cid = cmd.get("id")
+    target = normalize_target(cmd.get("target"))
+    value = cmd.get("value")
+
     if cid is None:
         return False
 
-    print('[MOCK COMMAND fan]', cmd)
+    SYS["prev_mode"] = SYS["mode"]
+    SYS["mode"] = "manual"
+    SYS["manual_override"] = True
 
-    if target == 'fan':
+    if target == "fan":
         if value is not None:
-            SYS['fan_status'] = str(value).lower()
-            SYS['fan_speed'] = 0 if SYS['fan_status'] == 'off' else (50 if SYS['fan_speed'] <= 0 else SYS['fan_speed'])
-    elif target == 'fan_speed':
-        SYS['fan_speed'] = clamp(to_int(value, SYS['fan_speed']), 0, 100)
-        SYS['fan_status'] = 'on' if SYS['fan_speed'] > 0 else 'off'
+            SYS["fan_status"] = str(value).lower()
+            SYS["fan_speed"] = 0 if SYS["fan_status"] == "off" else (50 if SYS["fan_speed"] <= 0 else SYS["fan_speed"])
+    elif target == "fan_speed":
+        SYS["fan_speed"] = clamp(to_int(value, SYS["fan_speed"]), 0, 100)
+        SYS["fan_status"] = "on" if SYS["fan_speed"] > 0 else "off"
 
-    return ack_command(KEYS['fan_key'], cid)
+    print(f"[CMD FAN] {cmd}")
+    return ack_command(KEYS["fan_key"], cid)
+
 
 def process_light_command(cmd):
-    cid, target, value = cmd.get('id'), normalize_target(cmd.get('target')), cmd.get('value')
+    cid = cmd.get("id")
+    target = normalize_target(cmd.get("target"))
+    value = cmd.get("value")
+
     if cid is None:
         return False
 
-    print('[MOCK COMMAND light]', cmd)
+    SYS["prev_mode"] = SYS["mode"]
+    SYS["mode"] = "manual"
+    SYS["manual_override"] = True
 
-    if target == 'light' and value is not None:
-        SYS['light_status'] = str(value).lower()
+    if target == "light" and value is not None:
+        SYS["light_status"] = str(value).lower()
 
-    return ack_command(KEYS['light_key'], cid)
+    print(f"[CMD LIGHT] {cmd}")
+    return ack_command(KEYS["light_key"], cid)
 
-def fetch_all_commands():
-    ok_all = True
+
+command_cursor = 0
+
+
+def fetch_one_command():
+    global command_cursor
+
     command_specs = [
-        (KEYS['runtime_key'], process_runtime_command),
-        (KEYS['fan_key'], process_fan_command),
-        (KEYS['light_key'], process_light_command)
+        (KEYS["runtime_key"], process_runtime_command),
+        (KEYS["fan_key"], process_fan_command),
+        (KEYS["light_key"], process_light_command),
     ]
-    for key, fn in command_specs:
+
+    key, fn = command_specs[command_cursor]
+    command_cursor = (command_cursor + 1) % len(command_specs)
+
+    if key is not None:
         data = fetch_next_command(key)
-        if data is not None and not fn(data):
-            ok_all = False
-    SYS['command_error'] = not ok_all
+        if data is not None:
+            fn(data)
 
-def control_device(target, value):
-    print('Bo qua control_device direct:', target, value)
-    return False
 
-# ===== BOOT =====
+# =========================================================
+# DEBUG
+# =========================================================
+def print_status():
+    print(
+        "[STATUS]",
+        f"mode={SYS['mode']}",
+        f"temp={SYS['nhiet_do']}",
+        f"hum={SYS['do_am']}",
+        f"light={SYS['shine']}",
+        f"pir_motion={SYS['pir_motion']}",
+        f"cam_human={SYS['camera_human_detected']}",
+        f"cam_count={SYS['camera_human_count']}",
+        f"cam_conf={round(SYS['camera_confidence'], 2)}",
+        f"cam_motion={SYS['camera_motion_detected']}",
+        f"cam_score={round(SYS['camera_motion_score'], 2)}",
+        f"someone={SYS['someone']}",
+        f"fan={SYS['fan_status']}:{SYS['fan_speed']}",
+        f"lamp={SYS['light_status']}",
+        f"door_open={SYS['door_open']}",
+        f"alert={SYS['alert_active']}",
+        f"security={SYS['security_alert_active']}",
+        f"yolo_error={SYS['yolo_error']}",
+    )
+
+
+# =========================================================
+# BOOT
+# =========================================================
 def boot():
-    print('Smart House')
-    print('Starting...')
-    update_status_leds()
-    close_door()
+    print("===================================================")
+    print(" VIRTUAL SMART HOUSE SIMULATOR + PIR + YOLO START ")
+    print("===================================================")
+    SYS["boot_ms"] = now_ms()
 
+    close_door()
     load_device_registry()
     fetch_config()
     fetch_device_state()
-    fetch_all_commands()
 
+    for _ in range(3):
+        fetch_one_command()
+
+    health = yolo_get("/health", timeout=2)
+    print("[YOLO HEALTH]", health)
+
+    print("[BOOT] Done")
+
+
+# =========================================================
+# MAIN LOOP
+# =========================================================
 def main():
     boot()
-    last = {'state': 0, 'config': 0, 'telemetry': 0, 'command': 0, 'registry': 0}
+
+    last = {
+        "state": 0,
+        "config": 0,
+        "telemetry": 0,
+        "command": 0,
+        "registry": 0,
+        "debug": 0,
+        "yolo": 0,
+    }
+
+    intervals = {
+        "registry": 600000,
+        "state": 15000,
+        "config": 120000,
+        "telemetry": 5000,
+        "command": 3000,
+        "debug": 2000,
+        "yolo": 1200,
+    }
+
+    net_step = 0
 
     while True:
-        read_sensor()
-        process_ir()
+        now = now_ms()
+
+        if now - SYS.get("last_gc", 0) > 10000:
+            gc.collect()
+            SYS["last_gc"] = now
+
+        # ===== LOCAL SIMULATION =====
+        read_sensor_virtual()
+
+        if now - last["yolo"] >= intervals["yolo"]:
+            update_camera_from_yolo()
+            last["yolo"] = now
+
+        combine_motion_sources()
         update_door_auto_close()
+        trigger_wrong_password_alert_periodic()
         clear_security_alert_if_needed()
         apply_mode_logic()
-        update_status_leds()
-        update_lcd()
 
-        now = int(time.time() * 1000)
-        server_error_now = has_server_error()
-        intervals = {
-            'registry': 60000,
-            'state': 5000 if server_error_now else 2000,
-            'config': 60000 if server_error_now else 20000,
-            'command': 700,
-            'telemetry': 30000 if server_error_now else 8000
-        }
+        if SYS["nhiet_do"] > CFG["Tcritical"] and now % 15000 < 1000:
+            send_temperature_alert_if_needed()
 
-        if now - last['registry'] >= intervals['registry']:
-            load_device_registry()
-            last['registry'] = now
+        set_door_relay(SYS["door_open"])
 
-        if now - last['state'] >= intervals['state']:
-            fetch_device_state()
-            last['state'] = now
+        # ===== NETWORK TASKS =====
+        did_network = False
 
-        if now - last['config'] >= intervals['config']:
-            fetch_config()
-            last['config'] = now
+        if net_step == 0 and now - last["command"] >= intervals["command"]:
+            try:
+                fetch_one_command()
+                SYS["command_error"] = False
+            except Exception as e:
+                SYS["command_error"] = True
+                print("[COMMAND ERROR]", e)
+            last["command"] = now
+            did_network = True
 
-        if (not server_error_now) and now - last['telemetry'] >= intervals['telemetry']:
+        elif net_step == 1 and now - last["state"] >= intervals["state"]:
+            try:
+                fetch_device_state()
+            except Exception as e:
+                SYS["state_error"] = True
+                print("[STATE ERROR]", e)
+            last["state"] = now
+            did_network = True
+
+        elif net_step == 2 and now - last["telemetry"] >= intervals["telemetry"]:
             if sensor_is_valid():
-                send_telemetry()
-            last['telemetry'] = now
+                send_next_telemetry()
+            last["telemetry"] = now
+            did_network = True
 
-        if now - last['command'] >= intervals['command']:
-            fetch_all_commands()
-            last['command'] = now
+        elif net_step == 3 and now - last["config"] >= intervals["config"]:
+            fetch_config()
+            last["config"] = now
+            did_network = True
 
-        print(
-            'device=', DEVICE_NAME,
-            'time=', datetime.now().isoformat(timespec='seconds'),
-            'mode=', SYS['mode'],
-            'fan_status=', SYS['fan_status'],
-            'fan_speed=', SYS['fan_speed'],
-            'light_status=', SYS['light_status'],
-            'door_locked=', SYS['door_locked'],
-            'door_open=', SYS['door_open'],
-            'failed_attempts=', SYS['failed_attempts'],
-            'registry_error=', SYS['registry_error'],
-            'state_error=', SYS['state_error'],
-            'config_error=', SYS['config_error'],
-            'telemetry_error=', SYS['telemetry_error'],
-            'command_error=', SYS['command_error'],
-            'server_error=', server_error_now,
-            'sensor_error=', SYS['sensor_error'],
-            'alert=', SYS['alert_active'],
-            'security_alert=', SYS['security_alert_active'],
-            'temp=', SYS['nhiet_do'],
-            'humidity=', SYS['do_am'],
-            'light=', SYS['shine'],
-            'motion=', SYS['someone']
-        )
+        elif net_step == 4 and now - last["registry"] >= intervals["registry"]:
+            load_device_registry()
+            last["registry"] = now
+            did_network = True
 
-        time.sleep(0.2)
+        net_step = (net_step + 1) % 5
 
-if __name__ == '__main__':
+        if now - last["debug"] >= intervals["debug"]:
+            print_status()
+            last["debug"] = now
+
+        time.sleep(0.5 if not did_network else 0.2)
+
+
+if __name__ == "__main__":
     main()

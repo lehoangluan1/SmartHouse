@@ -15,7 +15,7 @@ public class TelemetryAlertService {
 
     private final DeviceConfigService deviceConfigService;
     private final ThresholdStrategyFactory thresholdStrategyFactory;
-    private final AlertService alertService;
+    private final AlertLifecycleService alertLifecycleService;
 
     public void evaluateThresholds(TelemetryPersistenceResult result, Object rawValue) {
         if (result == null || result.device() == null || result.device().getHome() == null) {
@@ -31,8 +31,11 @@ public class TelemetryAlertService {
         strategy.evaluate(result.sensor(), config, rawValue).ifPresent(outcome -> {
             Long alertDeviceId = resolveAlertDeviceId(result, config);
 
-            alertService.openOrRefresh(
-                    result.device().getHome().getId(),
+            if (alertDeviceId == null && result.sensor() == null) {
+                return;
+            }
+
+            alertLifecycleService.upsertActiveAlert(
                     alertDeviceId,
                     result.sensor() != null ? result.sensor().getId() : null,
                     AlertType.valueOf(outcome.alertType()),
@@ -42,28 +45,28 @@ public class TelemetryAlertService {
     }
 
     private Long resolveAlertDeviceId(TelemetryPersistenceResult result, ConfigEntity config) {
-        if (result == null || result.sensorType() == null || config == null) {
+        if (result == null || result.sensorType() == null) {
             return null;
         }
 
         SensorType sensorType = result.sensorType();
 
         if (sensorType == SensorType.TEMPERATURE || sensorType == SensorType.HUMIDITY) {
-            return config.getMonitoringFanDevice() != null
+            return config != null && config.getMonitoringFanDevice() != null
                     ? config.getMonitoringFanDevice().getId()
-                    : null;
+                    : result.device() != null ? result.device().getId() : null;
         }
 
         if (sensorType == SensorType.LIGHT) {
-            return config.getMonitoringLightDevice() != null
+            return config != null && config.getMonitoringLightDevice() != null
                     ? config.getMonitoringLightDevice().getId()
-                    : null;
+                    : result.device() != null ? result.device().getId() : null;
         }
 
         if (sensorType == SensorType.MOTION) {
-            return null;
+            return result.device() != null ? result.device().getId() : null;
         }
 
-        return null;
+        return result.device() != null ? result.device().getId() : null;
     }
 }

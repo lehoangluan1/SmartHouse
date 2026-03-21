@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.java.domain.AlertStatus;
 import com.java.domain.AlertType;
 import com.java.domain.events.AlertLifecycleEvent;
-import com.java.eventing.AlertNotificationEvent;
+import com.java.eventing.AlertActivatedEvent;
 import com.java.eventing.DomainEventBus;
 import com.java.persistence.entity.AlertEntity;
 import com.java.persistence.entity.DeviceEntity;
@@ -17,7 +17,9 @@ import com.java.persistence.repo.AlertRepository;
 import com.java.persistence.repo.DeviceRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlertLifecycleService {
@@ -25,48 +27,50 @@ public class AlertLifecycleService {
     private final AlertRepository alertRepo;
     private final DeviceRepository deviceRepo;
     private final DomainEventBus eventBus;
-    private final TelegramAlertPolicy telegramAlertPolicy;
 
     @Transactional
     public void upsertActiveAlert(Long deviceId, Long sensorId, AlertType type, String message) {
-        AlertEntity existing = alertRepo.findTopOpen(deviceId, sensorId, type);
+        if (type == null) {
+            return;
+        }
+
         OffsetDateTime now = OffsetDateTime.now();
+        AlertEntity existing = alertRepo.findTopOpen(deviceId, sensorId, type);
 
         if (existing != null) {
             existing.setLastTriggeredAt(now);
             if (message != null && !message.isBlank()) {
                 existing.setMessage(message);
             }
+
             AlertEntity saved = alertRepo.save(existing);
 
-            eventBus.publish(new AlertLifecycleEvent(
+            log.info("Publishing AlertActivatedEvent (refresh): alertId={}, type={}", saved.getId(), saved.getType());
+
+            eventBus.publish(new AlertActivatedEvent(
                     saved.getId(),
                     saved.getHome() == null ? null : saved.getHome().getId(),
                     saved.getDevice() == null ? null : saved.getDevice().getId(),
-                    "ACTIVE"
+                    saved.getSensor() == null ? null : saved.getSensor().getId(),
+                    saved.getType(),
+                    saved.getMessage(),
+                    saved.getLastTriggeredAt(),
+                    false
             ));
-
-            if (telegramAlertPolicy.shouldNotify(saved.getType())) {
-                eventBus.publish(new AlertNotificationEvent(
-                        saved.getId(),
-                        saved.getHome() == null ? null : saved.getHome().getId(),
-                        saved.getDevice() == null ? null : saved.getDevice().getId(),
-                        saved.getSensor() == null ? null : saved.getSensor().getId(),
-                        saved.getType(),
-                        saved.getMessage(),
-                        saved.getLastTriggeredAt(),
-                        false
-                ));
-            }
 
             return;
         }
 
-        DeviceEntity device = deviceRepo.findById(deviceId).orElseThrow();
+        DeviceEntity device = null;
+        if (deviceId != null) {
+            device = deviceRepo.findById(deviceId).orElseThrow();
+        }
 
         AlertEntity alert = new AlertEntity();
-        alert.setHome(device.getHome());
-        alert.setDevice(device);
+        if (device != null) {
+            alert.setHome(device.getHome());
+            alert.setDevice(device);
+        }
 
         if (sensorId != null) {
             SensorEntity sensorRef = new SensorEntity();
@@ -81,25 +85,18 @@ public class AlertLifecycleService {
 
         AlertEntity saved = alertRepo.save(alert);
 
-        eventBus.publish(new AlertLifecycleEvent(
+        log.info("Publishing AlertActivatedEvent (new): alertId={}, type={}", saved.getId(), saved.getType());
+
+        eventBus.publish(new AlertActivatedEvent(
                 saved.getId(),
                 saved.getHome() == null ? null : saved.getHome().getId(),
                 saved.getDevice() == null ? null : saved.getDevice().getId(),
-                "ACTIVE"
+                saved.getSensor() == null ? null : saved.getSensor().getId(),
+                saved.getType(),
+                saved.getMessage(),
+                saved.getLastTriggeredAt(),
+                true
         ));
-
-        if (telegramAlertPolicy.shouldNotify(type)) {
-            eventBus.publish(new AlertNotificationEvent(
-                    saved.getId(),
-                    saved.getHome() == null ? null : saved.getHome().getId(),
-                    saved.getDevice() == null ? null : saved.getDevice().getId(),
-                    saved.getSensor() == null ? null : saved.getSensor().getId(),
-                    saved.getType(),
-                    saved.getMessage(),
-                    saved.getLastTriggeredAt(),
-                    true
-            ));
-        }
     }
 
     @Transactional
@@ -111,6 +108,7 @@ public class AlertLifecycleService {
 
         open.setStatus(AlertStatus.RESOLVED);
         open.setResolvedAt(OffsetDateTime.now());
+
         AlertEntity saved = alertRepo.save(open);
 
         eventBus.publish(new AlertLifecycleEvent(

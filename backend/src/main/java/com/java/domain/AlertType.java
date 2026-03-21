@@ -10,7 +10,7 @@ public enum AlertType {
     HIGH_LIGHT,
     MOTION_DETECTED,
     CUSTOM,
-    TEMP_TOO_HIGH,
-    TEMP_TOO_LOW,
+    HIGH_TEMPERATURE,
+    LOW_TEMPERATURE,
     WRONG_PASSWORD
 }

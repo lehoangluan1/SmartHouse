@@ -50,9 +50,23 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
+
+                        // auth public
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        // device public APIs
+                        .requestMatchers("/api/devices/home/**").permitAll()
+                        .requestMatchers("/api/devices/*/state").permitAll()
+                        .requestMatchers("/api/homes/*/configs").permitAll()
+                        .requestMatchers("/api/homes/*/alerts").permitAll()
+                        .requestMatchers("/api/device-telemetry").permitAll()
+                        .requestMatchers("/api/v1/device/**").permitAll()
+
+                        // nếu vẫn còn dùng control cũ
+                        .requestMatchers("/api/control/**").permitAll()
+
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(new JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class)

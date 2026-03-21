@@ -25,11 +25,14 @@ function DashboardPage() {
   const { user: currentUser } = useAuth();
   const homeId = currentUser?.homeId ? Number(currentUser.homeId) : null;
 
-  const rawDevices = dashboardData?.devices || [];
+  const rawDevices = Array.isArray(dashboardData?.devices)
+    ? dashboardData.devices
+    : [];
+
   const monitoringSlots = activeConfig?.monitoringSlots || {};
 
   const devices = useMemo(() => {
-    return buildConfiguredControllableDevices(rawDevices, monitoringSlots).map(
+    return buildConfiguredDashboardDevices(rawDevices, monitoringSlots).map(
       mapDeviceToCardModel
     );
   }, [rawDevices, monitoringSlots]);
@@ -46,6 +49,15 @@ function DashboardPage() {
     : "AUTO";
 
   useEffect(() => {
+    if (!homeId) {
+      setDashboardData(null);
+      setActiveConfig(null);
+      setMonitoring([]);
+      setSelectedDeviceId(null);
+      setLoading(false);
+      return;
+    }
+
     loadDashboard();
   }, [homeId]);
 
@@ -80,10 +92,10 @@ function DashboardPage() {
         fetchActiveConfigByHomeId(homeId),
       ]);
 
-      setDashboardData(data);
+      setDashboardData(data || null);
       setActiveConfig(fetchedActiveConfig || null);
 
-      const configuredControllableDevices = buildConfiguredControllableDevices(
+      const configuredControllableDevices = buildConfiguredDashboardDevices(
         data?.devices || [],
         fetchedActiveConfig?.monitoringSlots || {}
       );
@@ -106,6 +118,10 @@ function DashboardPage() {
       setMonitoring(monitoringItems);
     } catch (err) {
       setError(err?.message || "Failed to load dashboard");
+      setDashboardData(null);
+      setActiveConfig(null);
+      setMonitoring([]);
+      setSelectedDeviceId(null);
     } finally {
       setLoading(false);
     }
@@ -218,23 +234,29 @@ function DashboardPage() {
               </div>
 
               <div className="dashboard-panel__body dashboard-device-list">
-                {devices.map((device) => (
-                  <DeviceSwitchCard
-                    key={device.id}
-                    device={{
-                      ...device,
-                      intensity:
-                        intensityDraftMap[device.id] ?? device.intensity ?? 0,
-                    }}
-                    selected={selectedDeviceId === device.id}
-                    disabled={actionLoading}
-                    onSelect={() => setSelectedDeviceId(device.id)}
-                    onToggle={() => handleToggleDevice(device)}
-                    onIntensityChange={(value) =>
-                      handleIntensityChange(device, value)
-                    }
-                  />
-                ))}
+                {devices.length > 0 ? (
+                  devices.map((device) => (
+                    <DeviceSwitchCard
+                      key={device.id}
+                      device={{
+                        ...device,
+                        intensity:
+                          intensityDraftMap[device.id] ?? device.intensity ?? 0,
+                      }}
+                      selected={selectedDeviceId === device.id}
+                      disabled={actionLoading}
+                      onSelect={() => setSelectedDeviceId(device.id)}
+                      onToggle={() => handleToggleDevice(device)}
+                      onIntensityChange={(value) =>
+                        handleIntensityChange(device, value)
+                      }
+                    />
+                  ))
+                ) : (
+                  <div className="dashboard-panel__body">
+                    No active configured controllable devices
+                  </div>
+                )}
               </div>
 
               {controllerDevice ? (
@@ -283,12 +305,70 @@ function DashboardPage() {
   );
 }
 
+function normalizeDeviceType(rawType) {
+  const value = String(rawType || "").trim().toUpperCase();
+
+  if (
+    [
+      "TEMPERATURE",
+      "TEMP",
+      "TEMP_SENSOR",
+      "TEMPERATURE_SENSOR",
+      "TEMPERATURE_NODE",
+    ].includes(value)
+  ) {
+    return "TEMPERATURE_NODE";
+  }
+
+  if (
+    [
+      "HUMIDITY",
+      "HUMIDITY_SENSOR",
+      "HUMIDITY_NODE",
+      "HUMID",
+    ].includes(value)
+  ) {
+    return "HUMIDITY_NODE";
+  }
+
+  if (
+    [
+      "LIGHT_SENSOR",
+      "LDR",
+      "LUX",
+      "LIGHT_NODE",
+      "BRIGHTNESS_SENSOR",
+      "ILLUMINANCE",
+    ].includes(value)
+  ) {
+    return "LIGHT_NODE";
+  }
+
+  if (["FAN", "SMART_FAN"].includes(value)) {
+    return "FAN";
+  }
+
+  if (["LIGHT", "SMART_LIGHT", "LAMP", "BULB"].includes(value)) {
+    return "LIGHT";
+  }
+
+  if (["SMART_CONTROLLER", "CONTROLLER"].includes(value)) {
+    return "SMART_CONTROLLER";
+  }
+
+  return value;
+}
+
 function getDeviceType(device) {
-  return String(device?.subtype || device?.type || "").trim().toUpperCase();
+  return normalizeDeviceType(
+    device?.subtype || device?.type || device?.deviceType || device?.name
+  );
 }
 
 function getDeviceClass(device) {
-  return String(device?.deviceClass || device?.class || "").trim().toUpperCase();
+  return String(device?.deviceClass || device?.class || "")
+    .trim()
+    .toUpperCase();
 }
 
 function isControllerDevice(device) {
@@ -298,30 +378,13 @@ function isControllerDevice(device) {
   return deviceClass === "CONTROLLER" || subtype === "SMART_CONTROLLER";
 }
 
-function isControllableDevice(device) {
-  const type = getDeviceType(device);
-  return type === "FAN" || type === "LIGHT";
-}
-
-function isSensorDevice(device) {
-  const type = getDeviceType(device);
-  return (
-    type === "TEMPERATURE_NODE" ||
-    type === "HUMIDITY_NODE" ||
-    type === "LIGHT_NODE" ||
-    type === "MOTION_NODE"
-  );
-}
-
 function toDeviceId(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
 }
 
 function findConfiguredDevice(devices, candidateIds, expectedType) {
-  const normalizedIds = candidateIds
-    .map(toDeviceId)
-    .filter((id) => id !== null);
+  const normalizedIds = candidateIds.map(toDeviceId).filter((id) => id !== null);
 
   if (normalizedIds.length === 0) {
     return null;
@@ -336,29 +399,26 @@ function findConfiguredDevice(devices, candidateIds, expectedType) {
   );
 }
 
-function buildConfiguredControllableDevices(devices, slots) {
-  const fanDevice = findConfiguredDevice(
-    devices,
-    [slots?.fanDeviceId],
-    "FAN"
-  );
+function buildConfiguredDashboardDevices(devices, slots) {
+  const configured = [
+    findConfiguredDevice(devices, [slots?.fanDeviceId], "FAN"),
+    findConfiguredDevice(devices, [slots?.lightDeviceId], "LIGHT"),
+  ].filter(Boolean);  
+  console.log(slots?.lightDeviceId);
+  const uniqueMap = new Map();
+  configured.forEach((device) => {
+    uniqueMap.set(device.id, device);
+  });
 
-  const lightDevice = findConfiguredDevice(
-    devices,
-    [slots?.lightDeviceId],
-    "LIGHT"
-  );
-
-  return [fanDevice, lightDevice].filter(Boolean);
+  return [...uniqueMap.values()];
 }
 
 async function buildMonitoringFromConfig(devices, activeConfig) {
   const slots = activeConfig?.monitoringSlots;
-
   const fallbackItems = createMonitoringFallbackItems();
 
   if (!slots || typeof slots !== "object") {
-    return fallbackItems;
+    return Object.values(fallbackItems);
   }
 
   const slotDefinitions = [
@@ -373,7 +433,7 @@ async function buildMonitoringFromConfig(devices, activeConfig) {
       fallback: fallbackItems.humidity,
     },
     {
-      slotKeys: ["lightSensorDeviceId", "lightDeviceId"],
+      slotKeys: ["lightSensorDeviceId"],
       expectedType: "LIGHT_NODE",
       fallback: fallbackItems.light,
     },
@@ -400,7 +460,6 @@ async function buildMonitoringFromConfig(devices, activeConfig) {
         const telemetry = await fetchDeviceTelemetry(device.deviceKey, "1h");
         const items = telemetry?.items || [];
         const latest = items[items.length - 1];
-
         return mapTelemetryToMonitoring(device, latest) || fallback;
       } catch {
         return fallback;
@@ -571,11 +630,11 @@ function resolveEnabled(device) {
   const type = getDeviceType(device);
 
   if (type === "FAN") {
-    return String(device.fanStatus || "").toUpperCase() === "ON";
+    return String(device.fanStatus || device.status || "").toUpperCase() === "ON";
   }
 
   if (type === "LIGHT") {
-    return String(device.lightStatus || "").toUpperCase() === "ON";
+    return String(device.lightStatus || device.status || "").toUpperCase() === "ON";
   }
 
   return false;
@@ -591,7 +650,7 @@ function resolveIntensity(device) {
       device.intensity ??
       device.level;
 
-    return normalizePercent(value, device.fanStatus);
+    return normalizePercent(value, device.fanStatus || device.status);
   }
 
   if (type === "LIGHT") {
@@ -601,7 +660,7 @@ function resolveIntensity(device) {
       device.intensity ??
       device.level;
 
-    return normalizePercent(value, device.lightStatus);
+    return normalizePercent(value, device.lightStatus || device.status);
   }
 
   return 0;

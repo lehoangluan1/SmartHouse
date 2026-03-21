@@ -13,3 +13,10 @@
 .env
 *.log
 logs
+
+# Python
+yolov8m.pt
+venv/
+.venv/
+__pycache__/
+*.pyc

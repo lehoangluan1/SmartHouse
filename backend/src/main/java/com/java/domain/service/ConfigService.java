@@ -34,8 +34,6 @@ public class ConfigService {
     private final ConfigSnapshotFactory configSnapshotFactory;
 
     public List<ConfigResponse> getByHome(Long homeId) {
-        homeAccessGuard.requireHomeMembership(homeId);
-
         return configRepository.findByHomeIdOrderByUpdatedAtDesc(homeId)
                 .stream()
                 .map(configResponseMapper::toResponse)

@@ -1,6 +1,7 @@
 package com.java.domain.service;
 
 import org.springframework.stereotype.Component;
+
 import com.java.domain.AlertType;
 
 @Component
@@ -22,8 +23,8 @@ public class AlertMessageFormatter {
             case HIGH_LIGHT -> "High light";
             case MOTION_DETECTED -> "Motion detected";
             case CUSTOM -> "Custom alert";
-            case TEMP_TOO_HIGH -> "Temperature too high";
-            case TEMP_TOO_LOW -> "Temperature too low";
+            case HIGH_TEMPERATURE -> "Temperature too high";
+            case LOW_TEMPERATURE -> "Temperature too low";
         };
     }
 }

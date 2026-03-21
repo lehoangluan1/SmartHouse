@@ -26,7 +26,7 @@ aiot_dht20 = DHT20()
 aiot_ir_rx = IR_RX(Pin(pin10.pin, Pin.IN))
 aiot_ir_rx.start()
 
-SERVER_HOST = '10.229.90.208'
+SERVER_HOST = '10.128.4.27'
 SERVER_PORT = 8080
 server_ip = 'http://{}:{}'.format(SERVER_HOST, SERVER_PORT)
 

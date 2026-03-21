@@ -8,9 +8,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.java.config.BadRequestException;
 import com.java.config.NotFoundException;
+import com.java.controller.dto.AlertResponse;
 import com.java.domain.AlertStatus;
 import com.java.domain.AlertType;
 import com.java.domain.events.AlertLifecycleEvent;
+import com.java.eventing.AlertActivatedEvent;
 import com.java.eventing.DomainEventBus;
 import com.java.persistence.entity.AlertEntity;
 import com.java.persistence.entity.DeviceEntity;
@@ -20,7 +22,9 @@ import com.java.persistence.repo.HomeRepository;
 import com.java.persistence.repo.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlertService {
@@ -30,13 +34,21 @@ public class AlertService {
     private final UserRepository userRepository;
     private final DomainEventBus eventBus;
 
-    public List<AlertEntity> getByHome(Long homeId) {
-        return alertRepository.findByHomeIdOrderByCreatedAtDesc(homeId);
+    @Transactional(readOnly = true)
+    public List<AlertResponse> getByHome(Long homeId) {
+        return alertRepository.findByHomeIdOrderByCreatedAtDesc(homeId)
+                .stream()
+                .map(AlertResponse::from)
+                .toList();
     }
 
     @Transactional
-    public AlertEntity openOrRefresh(Long homeId, Long deviceId, Long sensorId, AlertType type, String message) {
+    public AlertResponse openOrRefresh(Long homeId, Long deviceId, Long sensorId, AlertType type, String message) {
+        OffsetDateTime now = OffsetDateTime.now();
+
         AlertEntity alert = alertRepository.findTopOpen(deviceId, sensorId, type);
+        boolean isNew = (alert == null);
+
         if (alert == null) {
             alert = new AlertEntity();
             alert.setHome(homeRepository.getReferenceById(homeId));
@@ -61,20 +73,29 @@ public class AlertService {
         alert.setType(type);
         alert.setMessage(message);
         alert.setStatus(AlertStatus.ACTIVE);
-        alert.setLastTriggeredAt(OffsetDateTime.now());
+        alert.setLastTriggeredAt(now);
 
         AlertEntity saved = alertRepository.save(alert);
-        eventBus.publish(new AlertLifecycleEvent(
+
+        log.info("Publishing AlertActivatedEvent: alertId={}, type={}, isNew={}",
+                saved.getId(), saved.getType(), isNew);
+
+        eventBus.publish(new AlertActivatedEvent(
                 saved.getId(),
                 saved.getHome() == null ? homeId : saved.getHome().getId(),
                 saved.getDevice() == null ? null : saved.getDevice().getId(),
-                "ACTIVE"
+                saved.getSensor() == null ? null : saved.getSensor().getId(),
+                saved.getType(),
+                saved.getMessage(),
+                saved.getLastTriggeredAt(),
+                isNew
         ));
-        return saved;
+
+        return AlertResponse.from(saved);
     }
 
     @Transactional
-    public AlertEntity acknowledge(Long alertId, Long userId) {
+    public AlertResponse acknowledge(Long alertId, Long userId) {
         AlertEntity alert = alertRepository.findById(alertId)
                 .orElseThrow(() -> new NotFoundException("Alert does not exist"));
 
@@ -87,22 +108,24 @@ public class AlertService {
         alert.setAcknowledgedAt(OffsetDateTime.now());
 
         AlertEntity saved = alertRepository.save(alert);
+
         eventBus.publish(new AlertLifecycleEvent(
                 saved.getId(),
                 saved.getHome() == null ? null : saved.getHome().getId(),
                 saved.getDevice() == null ? null : saved.getDevice().getId(),
                 "ACK"
         ));
-        return saved;
+
+        return AlertResponse.from(saved);
     }
 
     @Transactional
-    public AlertEntity resolve(Long alertId, Long userId) {
+    public AlertResponse resolve(Long alertId, Long userId) {
         AlertEntity alert = alertRepository.findById(alertId)
                 .orElseThrow(() -> new NotFoundException("Alert does not exist"));
 
         if (alert.getStatus() == AlertStatus.RESOLVED) {
-            return alert;
+            return AlertResponse.from(alert);
         }
 
         alert.setStatus(AlertStatus.RESOLVED);
@@ -110,12 +133,14 @@ public class AlertService {
         alert.setResolvedAt(OffsetDateTime.now());
 
         AlertEntity saved = alertRepository.save(alert);
+
         eventBus.publish(new AlertLifecycleEvent(
                 saved.getId(),
                 saved.getHome() == null ? null : saved.getHome().getId(),
                 saved.getDevice() == null ? null : saved.getDevice().getId(),
                 "RESOLVED"
         ));
-        return saved;
+
+        return AlertResponse.from(saved);
     }
 }
