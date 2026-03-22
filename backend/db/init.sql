@@ -198,8 +198,6 @@ CREATE TYPE public.alert_status AS ENUM (
 );
 
 
-ALTER TYPE public.alert_status OWNER TO postgres;
-
 --
 -- Name: alert_type; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -220,8 +218,6 @@ CREATE TYPE public.alert_type AS ENUM (
 );
 
 
-ALTER TYPE public.alert_type OWNER TO postgres;
-
 --
 -- Name: auth_provider; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -230,9 +226,6 @@ CREATE TYPE public.auth_provider AS ENUM (
     'LOCAL',
     'GOOGLE'
 );
-
-
-ALTER TYPE public.auth_provider OWNER TO postgres;
 
 --
 -- Name: command_status; Type: TYPE; Schema: public; Owner: postgres
@@ -246,9 +239,6 @@ CREATE TYPE public.command_status AS ENUM (
     'CANCELLED'
 );
 
-
-ALTER TYPE public.command_status OWNER TO postgres;
-
 --
 -- Name: device_class; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -261,9 +251,6 @@ CREATE TYPE public.device_class AS ENUM (
     'OTHER'
 );
 
-
-ALTER TYPE public.device_class OWNER TO postgres;
-
 --
 -- Name: entity_status; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -275,8 +262,6 @@ CREATE TYPE public.entity_status AS ENUM (
     'RETIRED'
 );
 
-
-ALTER TYPE public.entity_status OWNER TO postgres;
 
 --
 -- Name: home_user_role; Type: TYPE; Schema: public; Owner: postgres
@@ -292,8 +277,6 @@ CREATE TYPE public.home_user_role AS ENUM (
 );
 
 
-ALTER TYPE public.home_user_role OWNER TO postgres;
-
 --
 -- Name: system_mode; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -306,8 +289,6 @@ CREATE TYPE public.system_mode AS ENUM (
 );
 
 
-ALTER TYPE public.system_mode OWNER TO postgres;
-
 --
 -- Name: system_user_role; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -319,9 +300,6 @@ CREATE TYPE public.system_user_role AS ENUM (
     'SUPER_ADMIN'
 );
 
-
-ALTER TYPE public.system_user_role OWNER TO postgres;
-
 --
 -- Name: user_status; Type: TYPE; Schema: public; Owner: postgres
 --
@@ -332,9 +310,6 @@ CREATE TYPE public.user_status AS ENUM (
     'LOCKED',
     'INVITED'
 );
-
-
-ALTER TYPE public.user_status OWNER TO postgres;
 
 --
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -348,9 +323,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
-
-ALTER FUNCTION public.set_updated_at() OWNER TO postgres;
 
 --
 -- Name: validate_alert_references(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -395,9 +367,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
-
-ALTER FUNCTION public.validate_alert_references() OWNER TO postgres;
 
 --
 -- Name: validate_control_command_value(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -458,8 +427,6 @@ END;
 $$;
 
 
-ALTER FUNCTION public.validate_control_command_value() OWNER TO postgres;
-
 --
 -- Name: validate_device_config_same_home(); Type: FUNCTION; Schema: public; Owner: postgres
 --
@@ -491,8 +458,6 @@ BEGIN
 END;
 $$;
 
-
-ALTER FUNCTION public.validate_device_config_same_home() OWNER TO postgres;
 
 --
 -- Name: validate_device_runtime_state(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -553,8 +518,6 @@ END;
 $$;
 
 
-ALTER FUNCTION public.validate_device_runtime_state() OWNER TO postgres;
-
 --
 -- Name: validate_home_owner_role(); Type: FUNCTION; Schema: public; Owner: postgres
 --
@@ -585,8 +548,6 @@ BEGIN
 END;
 $$;
 
-
-ALTER FUNCTION public.validate_home_owner_role() OWNER TO postgres;
 
 --
 -- Name: validate_schedule_value(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -646,9 +607,6 @@ BEGIN
 END;
 $$;
 
-
-ALTER FUNCTION public.validate_schedule_value() OWNER TO postgres;
-
 --
 -- Name: validate_sensor_device_class(); Type: FUNCTION; Schema: public; Owner: postgres
 --
@@ -677,8 +635,6 @@ END;
 $$;
 
 
-ALTER FUNCTION public.validate_sensor_device_class() OWNER TO postgres;
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -702,8 +658,6 @@ CREATE TABLE public.activity_logs (
 );
 
 
-ALTER TABLE public.activity_logs OWNER TO postgres;
-
 --
 -- Name: activity_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -714,9 +668,6 @@ CREATE SEQUENCE public.activity_logs_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
-ALTER SEQUENCE public.activity_logs_id_seq OWNER TO postgres;
 
 --
 -- Name: activity_logs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -748,8 +699,6 @@ CREATE TABLE public.alerts (
 );
 
 
-ALTER TABLE public.alerts OWNER TO postgres;
-
 --
 -- Name: alerts_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -761,8 +710,6 @@ CREATE SEQUENCE public.alerts_id_seq
     NO MAXVALUE
     CACHE 1;
 
-
-ALTER SEQUENCE public.alerts_id_seq OWNER TO postgres;
 
 --
 -- Name: alerts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -816,8 +763,6 @@ CREATE TABLE public.configs (
 );
 
 
-ALTER TABLE public.configs OWNER TO postgres;
-
 --
 -- Name: configs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -829,8 +774,6 @@ CREATE SEQUENCE public.configs_id_seq
     NO MAXVALUE
     CACHE 1;
 
-
-ALTER SEQUENCE public.configs_id_seq OWNER TO postgres;
 
 --
 -- Name: configs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -862,8 +805,6 @@ CREATE TABLE public.control_commands (
 );
 
 
-ALTER TABLE public.control_commands OWNER TO postgres;
-
 --
 -- Name: control_commands_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -874,9 +815,6 @@ CREATE SEQUENCE public.control_commands_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
-ALTER SEQUENCE public.control_commands_id_seq OWNER TO postgres;
 
 --
 -- Name: control_commands_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -905,8 +843,6 @@ CREATE TABLE public.device_capabilities (
 );
 
 
-ALTER TABLE public.device_capabilities OWNER TO postgres;
-
 --
 -- Name: device_configs; Type: TABLE; Schema: public; Owner: postgres
 --
@@ -919,8 +855,6 @@ CREATE TABLE public.device_configs (
     reason text
 );
 
-
-ALTER TABLE public.device_configs OWNER TO postgres;
 
 --
 -- Name: device_runtime_state; Type: TABLE; Schema: public; Owner: postgres
@@ -936,8 +870,6 @@ CREATE TABLE public.device_runtime_state (
     CONSTRAINT ck_device_runtime_state_exactly_one_value CHECK ((((((value_boolean IS NOT NULL))::integer + ((value_number IS NOT NULL))::integer) + ((value_text IS NOT NULL))::integer) = 1))
 );
 
-
-ALTER TABLE public.device_runtime_state OWNER TO postgres;
 
 --
 -- Name: device_state_history; Type: TABLE; Schema: public; Owner: postgres
@@ -959,8 +891,6 @@ CREATE TABLE public.device_state_history (
 );
 
 
-ALTER TABLE public.device_state_history OWNER TO postgres;
-
 --
 -- Name: device_state_history_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -971,9 +901,6 @@ CREATE SEQUENCE public.device_state_history_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
-ALTER SEQUENCE public.device_state_history_id_seq OWNER TO postgres;
 
 --
 -- Name: device_state_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1007,8 +934,6 @@ CREATE TABLE public.devices (
 );
 
 
-ALTER TABLE public.devices OWNER TO postgres;
-
 --
 -- Name: devices_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -1020,8 +945,6 @@ CREATE SEQUENCE public.devices_id_seq
     NO MAXVALUE
     CACHE 1;
 
-
-ALTER SEQUENCE public.devices_id_seq OWNER TO postgres;
 
 --
 -- Name: devices_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1047,8 +970,6 @@ CREATE TABLE public.home_users (
 );
 
 
-ALTER TABLE public.home_users OWNER TO postgres;
-
 --
 -- Name: homes; Type: TABLE; Schema: public; Owner: postgres
 --
@@ -1064,8 +985,6 @@ CREATE TABLE public.homes (
 );
 
 
-ALTER TABLE public.homes OWNER TO postgres;
-
 --
 -- Name: homes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -1078,7 +997,6 @@ CREATE SEQUENCE public.homes_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.homes_id_seq OWNER TO postgres;
 
 --
 -- Name: homes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1105,7 +1023,6 @@ CREATE TABLE public.outbox_event (
 );
 
 
-ALTER TABLE public.outbox_event OWNER TO postgres;
 
 --
 -- Name: outbox_event_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -1119,7 +1036,6 @@ CREATE SEQUENCE public.outbox_event_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.outbox_event_id_seq OWNER TO postgres;
 
 --
 -- Name: outbox_event_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1153,8 +1069,6 @@ CREATE TABLE public.schedules (
 );
 
 
-ALTER TABLE public.schedules OWNER TO postgres;
-
 --
 -- Name: schedules_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -1166,8 +1080,6 @@ CREATE SEQUENCE public.schedules_id_seq
     NO MAXVALUE
     CACHE 1;
 
-
-ALTER SEQUENCE public.schedules_id_seq OWNER TO postgres;
 
 --
 -- Name: schedules_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1191,8 +1103,6 @@ CREATE TABLE public.sensor_data (
 );
 
 
-ALTER TABLE public.sensor_data OWNER TO postgres;
-
 --
 -- Name: sensor_data_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -1203,9 +1113,6 @@ CREATE SEQUENCE public.sensor_data_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
-ALTER SEQUENCE public.sensor_data_id_seq OWNER TO postgres;
 
 --
 -- Name: sensor_data_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1233,8 +1140,6 @@ CREATE TABLE public.sensors (
 );
 
 
-ALTER TABLE public.sensors OWNER TO postgres;
-
 --
 -- Name: sensors_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -1247,7 +1152,6 @@ CREATE SEQUENCE public.sensors_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.sensors_id_seq OWNER TO postgres;
 
 --
 -- Name: sensors_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1273,7 +1177,6 @@ CREATE TABLE public.user_auth_providers (
 );
 
 
-ALTER TABLE public.user_auth_providers OWNER TO postgres;
 
 --
 -- Name: user_auth_providers_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -1287,7 +1190,6 @@ CREATE SEQUENCE public.user_auth_providers_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_auth_providers_id_seq OWNER TO postgres;
 
 --
 -- Name: user_auth_providers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1315,7 +1217,6 @@ CREATE TABLE public.user_refresh_tokens (
 );
 
 
-ALTER TABLE public.user_refresh_tokens OWNER TO postgres;
 
 --
 -- Name: user_refresh_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -1327,9 +1228,6 @@ CREATE SEQUENCE public.user_refresh_tokens_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
-ALTER SEQUENCE public.user_refresh_tokens_id_seq OWNER TO postgres;
 
 --
 -- Name: user_refresh_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -1359,8 +1257,6 @@ CREATE TABLE public.users (
 );
 
 
-ALTER TABLE public.users OWNER TO postgres;
-
 --
 -- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
@@ -1371,9 +1267,6 @@ CREATE SEQUENCE public.users_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
-ALTER SEQUENCE public.users_id_seq OWNER TO postgres;
 
 --
 -- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
