@@ -19,16 +19,22 @@ dht = DHT20()
 ir_rx = IR_RX(Pin(pin10.pin, Pin.IN))
 ir_rx.start()
 
-SERVER_HOST = '10.128.4.27'
-SERVER_PORT = 8080
-BASE = 'http://{}:{}'.format(SERVER_HOST, SERVER_PORT)
+# ===== GATEWAY / SECURITY =====
+# Device chỉ gọi gateway, KHÔNG gọi trực tiếp backend / YOLO
+GATEWAY_HOST = '192.168.1.27'
+GATEWAY_PORT = 9000
+GATEWAY_BASE = 'http://{}:{}'.format(GATEWAY_HOST, GATEWAY_PORT)
 
-YOLO_HOST = '10.128.4.27'   # sửa theo IP máy chạy YOLO nếu khác
-YOLO_PORT = 5000
-YOLO_BASE = 'http://{}:{}'.format(YOLO_HOST, YOLO_PORT)
+DEVICE_TOKEN = 'ohstem-demo-token'
+HTTP_TIMEOUT = 5000
 
 HOME_ID = 1
 DEVICE_NAME = 'OhStem Living Room'
+
+COMMON_HEADERS = {
+  'X-Device-Token': DEVICE_TOKEN,
+  'Content-Type': 'application/json'
+}
 
 COLOR_RED = '#050000'
 COLOR_GREEN = '#000500'
@@ -76,7 +82,7 @@ SYS = {
   # PIR thật
   'pir_motion': False,
 
-  # YOLO
+  # YOLO qua gateway
   'camera_human_detected': False,
   'camera_human_count': 0,
   'camera_confidence': 0.0,
@@ -240,36 +246,35 @@ def has_server_error():
     SYS['registry_error']
   )
 
-def http_get(path):
+# ===== SECURE GATEWAY NETWORK =====
+def gateway_get(path):
   resp = None
   try:
-    resp = urequests.get(BASE + path)
-    return unwrap(j(resp))
+    resp = urequests.get(
+      GATEWAY_BASE + path,
+      headers=COMMON_HEADERS,
+      timeout=HTTP_TIMEOUT
+    )
+    if ok(resp):
+      return unwrap(j(resp))
+    return None
   except:
     return None
   finally:
     close_resp(resp)
 
-def http_post(path, payload):
+def gateway_post(path, payload):
   resp = None
   try:
-    resp = urequests.post(BASE + path, json=payload, data=None, headers={})
+    resp = urequests.post(
+      GATEWAY_BASE + path,
+      json=payload,
+      headers=COMMON_HEADERS,
+      timeout=HTTP_TIMEOUT
+    )
     return ok(resp), resp.text if resp else None
   except:
     return False, None
-  finally:
-    close_resp(resp)
-
-def yolo_get(path):
-  resp = None
-  try:
-    resp = urequests.get(YOLO_BASE + path)
-    data = j(resp)
-    if ok(resp):
-      return data
-    return None
-  except:
-    return None
   finally:
     close_resp(resp)
 
@@ -363,7 +368,7 @@ def find_by_rule(devices, name):
   return devices[0] if name == 'runtime' and devices else None
 
 def load_device_registry():
-  data = http_get('/api/devices/home/' + str(HOME_ID))
+  data = gateway_get('/gw/devices/home/' + str(HOME_ID))
   if not isinstance(data, list) or not data:
     SYS['registry_error'] = True
     return False
@@ -409,7 +414,7 @@ def send_security_alert(reason, detail):
     "type": reason,
     "message": detail
   }
-  http_post('/api/homes/' + str(HOME_ID) + '/alerts', payload)
+  gateway_post('/gw/homes/' + str(HOME_ID) + '/alerts', payload)
 
 def trigger_security_alert(reason, detail):
   SYS['security_alert_active'] = True
@@ -583,7 +588,7 @@ def read_sensor():
     SYS['pir_motion'] = False
 
 def update_camera_from_yolo():
-  data = yolo_get('/check_human')
+  data = gateway_get('/gw/yolo/check_human')
 
   if not isinstance(data, dict) or data.get('status') != 'success':
     SYS['yolo_error'] = True
@@ -622,7 +627,7 @@ def sensor_is_valid():
 
 # ===== STATE / CONFIG =====
 def fetch_state_by_device_id(device_id):
-  return None if device_id is None else http_get('/api/devices/' + str(device_id) + '/state')
+  return None if device_id is None else gateway_get('/gw/devices/' + str(device_id) + '/state')
 
 def fetch_device_state():
   if SYS.get('manual_override'):
@@ -658,7 +663,7 @@ def fetch_device_state():
   SYS['state_error'] = not ok_all
 
 def fetch_config():
-  data = http_get('/api/homes/' + str(HOME_ID) + '/configs')
+  data = gateway_get('/gw/homes/' + str(HOME_ID) + '/configs')
   if not isinstance(data, dict):
     SYS['config_error'] = True
     return
@@ -759,7 +764,7 @@ telemetry_cursor = 0
 
 def send_one_telemetry(device_key, sensor_type, value):
   payload = {"deviceKey": device_key, "sensorType": sensor_type, "value": value}
-  success, _ = http_post('/api/device-telemetry', payload)
+  success, _ = gateway_post('/gw/device-telemetry', payload)
   SYS['telemetry_error'] = not success
   return success
 
@@ -786,13 +791,13 @@ def send_next_telemetry():
 def fetch_next_command(device_key):
   if device_key is None:
     return None
-  data = http_get('/api/v1/device/' + device_key + '/commands/next')
+  data = gateway_get('/gw/device/' + device_key + '/commands/next')
   return data if isinstance(data, dict) and data.get('id') is not None else None
 
 def ack_command(device_key, command_id):
   if device_key is None or command_id is None:
     return False
-  success, _ = http_post('/api/v1/device/' + device_key + '/commands/ack', {"id": command_id})
+  success, _ = gateway_post('/gw/device/' + device_key + '/commands/ack', {"id": command_id})
   return success
 
 def normalize_target(t):
@@ -900,7 +905,7 @@ fetch_device_state()
 for _ in range(3):
   fetch_one_command()
 
-health = yolo_get('/health')
+health = gateway_get('/gw/yolo/health')
 print('[YOLO HEALTH]', health)
 
 last = {
@@ -934,7 +939,7 @@ while True:
     set_door_relay(SYS['door_open'])
     SYS['last_door_hw'] = SYS['door_open']
 
-  # YOLO chỉ gọi theo nhịp riêng
+  # YOLO qua gateway
   if time.ticks_diff(now, last['yolo']) >= intervals['yolo']:
     if not SYS['ir_typing']:
       update_camera_from_yolo()
@@ -946,22 +951,15 @@ while True:
   update_status_leds()
   update_lcd()
 
-  # cảnh báo nhiệt độ cao mỗi 15s nếu vẫn đang critical
   if SYS['nhiet_do'] is not None and SYS['nhiet_do'] > CFG['Tcritical']:
     if time.ticks_diff(now, temp_alert_last) >= 15000:
       send_temperature_alert_if_needed()
       temp_alert_last = now
 
-  # ========================================================
-  # ƯU TIÊN NHẬP MẬT KHẨU: ĐÓNG BĂNG TOÀN BỘ NETWORK NẶNG
-  # ========================================================
   if SYS['ir_typing']:
     time.sleep_ms(50)
     continue
 
-  # ========================================================
-  # TỰ GIÃN KHI SERVER LỖI
-  # ========================================================
   if has_server_error():
     intervals['command'] = 10000
     intervals['state'] = 60000

@@ -10,9 +10,6 @@ import com.java.controller.dto.ControlCommandResponse;
 import com.java.controller.dto.ControlExecutionRequest;
 import com.java.controller.dto.ControlExecutionResult;
 import com.java.controller.dto.ManualControlExecutionRequest;
-import com.java.eventing.DeviceStateChangedEvent;
-import com.java.eventing.DomainEventBus;
-import com.java.eventing.HomeModeChangedEvent;
 import com.java.persistence.entity.DeviceEntity;
 import com.java.persistence.repo.DeviceRepository;
 
@@ -26,7 +23,6 @@ public class ControlFacadeService {
     private final HomeAccessGuard homeAccessGuard;
     private final ManualControlService manualControlService;
     private final AutoControlService autoControlService;
-    private final DomainEventBus eventBus;
 
     @Transactional
     public ControlExecutionResult control(ControlExecutionRequest request) {
@@ -59,8 +55,6 @@ public class ControlFacadeService {
         ControlCommandResponse response =
                 manualControlService.execute(device, request.request());
 
-        publishDashboardEvent(device, request.request().target(), request.request().value());
-
         return ControlExecutionResult.manual(response);
     }
 
@@ -83,76 +77,9 @@ public class ControlFacadeService {
                 request.method()
         );
 
-        if (executed) {
-            publishDashboardEvent(device, request.target(), request.value());
-        }
-
         return executed
                 ? ControlExecutionResult.autoExecuted()
                 : ControlExecutionResult.autoNoOp();
-    }
-
-    private void publishDashboardEvent(DeviceEntity device, String target, String value) {
-        if (device == null || device.getHome() == null || device.getHome().getId() == null) {
-            return;
-        }
-
-        Long homeId = device.getHome().getId();
-        Long deviceId = device.getId();
-        String normalizedTarget = target == null ? "" : target.trim().toLowerCase();
-        String normalizedValue = value == null ? "" : value.trim();
-
-        switch (normalizedTarget) {
-            case "fan" -> eventBus.publish(DeviceStateChangedEvent.builder()
-                    .homeId(homeId)
-                    .deviceId(deviceId)
-                    .status(normalizeOnOff(normalizedValue))
-                    .build());
-
-            case "fanspeed" -> eventBus.publish(DeviceStateChangedEvent.builder()
-                    .homeId(homeId)
-                    .deviceId(deviceId)
-                    .status(parsePercent(normalizedValue) > 0 ? "ON" : "OFF")
-                    .speed(parsePercent(normalizedValue))
-                    .build());
-
-            case "light" -> eventBus.publish(DeviceStateChangedEvent.builder()
-                    .homeId(homeId)
-                    .deviceId(deviceId)
-                    .status(normalizeOnOff(normalizedValue))
-                    .build());
-
-            case "brightness" -> eventBus.publish(DeviceStateChangedEvent.builder()
-                    .homeId(homeId)
-                    .deviceId(deviceId)
-                    .status(parsePercent(normalizedValue) > 0 ? "ON" : "OFF")
-                    .brightness(parsePercent(normalizedValue))
-                    .build());
-
-            case "mode" -> eventBus.publish(HomeModeChangedEvent.builder()
-                    .homeId(homeId)
-                    .deviceId(deviceId)
-                    .mode(normalizedValue.toUpperCase())
-                    .build());
-
-            default -> {
-            }
-        }
-    }
-
-    private String normalizeOnOff(String value) {
-        return "ON".equalsIgnoreCase(value) ? "ON" : "OFF";
-    }
-
-    private Integer parsePercent(String value) {
-        try {
-            int num = Integer.parseInt(value);
-            if (num < 0) return 0;
-            if (num > 100) return 100;
-            return num;
-        } catch (Exception ex) {
-            return 0;
-        }
     }
 
     private DeviceEntity loadAndValidateDevice(Long deviceId) {

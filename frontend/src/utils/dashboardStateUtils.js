@@ -24,35 +24,62 @@ export function mapRealtimeStateToDevicePatch(device, payload) {
 }
 
 export function applyRealtimeEventToDashboard(prev, event) {
-  if (!prev || !event || typeof event !== "object") return prev;
+  if (!prev || !Array.isArray(prev.devices) || !event) return prev;
 
   if (event.type === "DEVICE_STATE_CHANGED") {
-    const deviceId = Number(event.deviceId);
+    const { deviceId, payload } = event;
 
     return {
       ...prev,
-      devices: (prev.devices || []).map((device) => {
-        if (Number(device.id) !== deviceId) return device;
+      devices: prev.devices.map((device) => {
+        if (Number(device.id) !== Number(deviceId)) return device;
 
-        return {
+        const nextStatus = String(payload?.status ?? device.status ?? "").toUpperCase();
+        const isOn = nextStatus === "ON";
+        const type = getDeviceType(device);
+
+        const basePatch = mapRealtimeStateToDevicePatch(device, payload || {});
+        const nextDevice = {
           ...device,
-          ...mapRealtimeStateToDevicePatch(device, event.payload || {}),
+          ...basePatch,
+          status: nextStatus || device.status,
         };
+
+        if (type === "FAN") {
+          return {
+            ...nextDevice,
+            fanStatus: nextStatus || nextDevice.fanStatus,
+            fanSpeed:
+              payload?.speed ?? payload?.fanSpeed ?? (isOn ? nextDevice.fanSpeed : 0),
+          };
+        }
+
+        if (type === "LIGHT") {
+          return {
+            ...nextDevice,
+            lightStatus: nextStatus || nextDevice.lightStatus,
+            brightness:
+              payload?.brightness ?? payload?.level ?? (isOn ? nextDevice.brightness : 0),
+          };
+        }
+
+        return nextDevice;
       }),
     };
   }
 
   if (event.type === "HOME_MODE_CHANGED") {
-    const controllerId = Number(event.deviceId);
+    const { deviceId, payload } = event;
+    const nextMode = String(payload?.mode || "").toUpperCase();
 
     return {
       ...prev,
-      devices: (prev.devices || []).map((device) => {
-        if (Number(device.id) !== controllerId) return device;
+      devices: prev.devices.map((device) => {
+        if (Number(device.id) !== Number(deviceId)) return device;
 
         return {
           ...device,
-          mode: event.payload?.mode || device.mode,
+          mode: nextMode || device.mode,
         };
       }),
     };

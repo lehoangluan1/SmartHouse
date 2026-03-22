@@ -7,18 +7,24 @@ import requests
 
 # =========================================================
 # VIRTUAL SMART HOUSE SIMULATOR + PIR + YOLO HUMAN MOTION
+# THROUGH SECURE GATEWAY
 # =========================================================
 
-SERVER_HOST = "192.168.1.20"
-SERVER_PORT = 8080
-BASE = f"http://{SERVER_HOST}:{SERVER_PORT}"
+GATEWAY_HOST = "192.168.1.27"
+GATEWAY_PORT = 9000
+GATEWAY_BASE = f"http://{GATEWAY_HOST}:{GATEWAY_PORT}"
 
-YOLO_HOST = "127.0.0.1"   # hoặc IP máy chạy YOLO
-YOLO_PORT = 5000
-YOLO_BASE = f"http://{YOLO_HOST}:{YOLO_PORT}"
+DEVICE_TOKEN = "ohstem-demo-token"
+COMMON_HEADERS = {
+    "X-Device-Token": DEVICE_TOKEN,
+    "Content-Type": "application/json",
+}
 
 HOME_ID = 1
 DEVICE_NAME = "Virtual OhStem Living Room"
+
+HTTP_TIMEOUT = 5
+YOLO_TIMEOUT = 2
 
 # ===== CONFIG =====
 CFG = {
@@ -57,21 +63,14 @@ SYS = {
     "nhiet_do": 0.0,
     "do_am": 0.0,
     "shine": 0,
-
-    # Kết quả cuối cùng dùng cho motion sensor telemetry
     "someone": False,
-
-    # PIR giả lập
     "pir_motion": False,
-
-    # Camera YOLO
     "camera_human_detected": False,
     "camera_human_count": 0,
     "camera_confidence": 0.0,
     "camera_motion_detected": False,
     "camera_motion_score": 0.0,
     "yolo_error": False,
-
     "door_locked": True,
     "door_open": False,
     "door_open_until": None,
@@ -82,6 +81,9 @@ SYS = {
     "last_wrong_password_alert_ms": 0,
     "boot_ms": 0,
     "last_human_seen_ms": 0,
+    "last_fan_hw": None,
+    "last_light_hw": None,
+    "last_door_hw": None,
 }
 
 # ===== DEVICE REGISTRY =====
@@ -206,58 +208,65 @@ def unwrap(x):
     return x.get("data") if isinstance(x, dict) and "data" in x else x
 
 
-def http_get(path, timeout=5):
+def gateway_get(path, timeout=HTTP_TIMEOUT):
     try:
-        resp = requests.get(BASE + path, timeout=timeout)
+        resp = requests.get(
+            GATEWAY_BASE + path,
+            headers=COMMON_HEADERS,
+            timeout=timeout,
+        )
         if 200 <= resp.status_code < 300:
             try:
                 return unwrap(resp.json())
             except:
                 return None
+        print(f"[GATEWAY GET FAIL] {path}: {resp.status_code} {resp.text}")
         return None
     except Exception as e:
-        print(f"[GET FAIL] {path}: {e}")
+        print(f"[GATEWAY GET FAIL] {path}: {e}")
         return None
 
 
-def http_post(path, payload, timeout=5):
+def gateway_post(path, payload, timeout=HTTP_TIMEOUT):
     try:
-        resp = requests.post(BASE + path, json=payload, timeout=timeout)
+        resp = requests.post(
+            GATEWAY_BASE + path,
+            json=payload,
+            headers=COMMON_HEADERS,
+            timeout=timeout,
+        )
         ok = 200 <= resp.status_code < 300
         text = resp.text
         if not ok:
-            print(f"[POST FAIL] {path}: {resp.status_code} {text}")
+            print(f"[GATEWAY POST FAIL] {path}: {resp.status_code} {text}")
         return ok, text
     except Exception as e:
-        print(f"[POST FAIL] {path}: {e}")
+        print(f"[GATEWAY POST FAIL] {path}: {e}")
         return False, None
-
-
-def yolo_get(path, timeout=2):
-    try:
-        resp = requests.get(YOLO_BASE + path, timeout=timeout)
-        if 200 <= resp.status_code < 300:
-            return resp.json()
-        print(f"[YOLO FAIL] {path}: {resp.status_code} {resp.text}")
-        return None
-    except Exception as e:
-        print(f"[YOLO FAIL] {path}: {e}")
-        return None
 
 
 # =========================================================
 # VIRTUAL HARDWARE
 # =========================================================
 def batquat(on, speed):
-    print(f"[VIRTUAL FAN] {'ON' if on else 'OFF'} speed={speed}")
+    current = ("on" if on else "off", speed if on else 0)
+    if current != SYS.get("last_fan_hw"):
+        print(f"[VIRTUAL FAN] {'ON' if on else 'OFF'} speed={speed if on else 0}")
+        SYS["last_fan_hw"] = current
 
 
 def batden(on):
-    print(f"[VIRTUAL LIGHT] {'ON' if on else 'OFF'}")
+    current = "on" if on else "off"
+    if current != SYS.get("last_light_hw"):
+        print(f"[VIRTUAL LIGHT] {'ON' if on else 'OFF'}")
+        SYS["last_light_hw"] = current
 
 
 def set_door_relay(is_open):
-    print(f"[VIRTUAL DOOR RELAY] {'OPEN' if is_open else 'CLOSE'}")
+    current = bool(is_open)
+    if current != SYS.get("last_door_hw"):
+        print(f"[VIRTUAL DOOR RELAY] {'OPEN' if is_open else 'CLOSE'}")
+        SYS["last_door_hw"] = current
 
 
 def open_door():
@@ -318,9 +327,9 @@ def find_by_rule(devices, name):
 
 
 def load_device_registry():
-    data = http_get(f"/api/devices/home/{HOME_ID}")
+    data = gateway_get(f"/gw/devices/home/{HOME_ID}")
     if not isinstance(data, list) or not data:
-        print("[REGISTRY] Không load được từ server, dùng key local")
+        print("[REGISTRY] Không load được từ gateway/server, dùng key local")
         SYS["registry_error"] = True
         return False
 
@@ -366,7 +375,7 @@ def send_security_alert(reason, detail):
         "type": reason,
         "message": detail,
     }
-    success, _ = http_post(f"/api/homes/{HOME_ID}/alerts", payload)
+    success, _ = gateway_post(f"/gw/homes/{HOME_ID}/alerts", payload)
     print(f"[ALERT] {reason} | {detail} | success={success}")
     return success
 
@@ -407,7 +416,6 @@ def read_sensor_virtual():
     hum = 65 + 12 * math.sin(elapsed / 11.0 + 1.2) + random.uniform(-1.0, 1.0)
     light = 50 + 40 * math.sin(elapsed / 6.0 + 0.4)
 
-    # PIR giả lập
     pir_motion = (int(elapsed) % 12) in [2, 3, 8, 9]
 
     SYS["nhiet_do"] = round(clamp(temp, 20, 45), 1)
@@ -417,7 +425,7 @@ def read_sensor_virtual():
 
 
 def update_camera_from_yolo():
-    data = yolo_get("/check_human", timeout=2)
+    data = gateway_get("/gw/yolo/check_human", timeout=YOLO_TIMEOUT)
 
     if not isinstance(data, dict) or data.get("status") != "success":
         SYS["yolo_error"] = True
@@ -442,9 +450,6 @@ def combine_motion_sources():
     camera_motion = bool(SYS.get("camera_motion_detected", False))
     confidence = to_float(SYS.get("camera_confidence", 0.0), 0.0)
 
-    # Rule cân bằng:
-    # - camera thấy người đang chuyển động => có người
-    # - PIR báo + camera thấy người đủ tin cậy => có người
     active = camera_motion or (pir_motion and human_detected and confidence >= 0.5)
 
     if active:
@@ -469,7 +474,7 @@ def sensor_is_valid():
 # STATE / CONFIG
 # =========================================================
 def fetch_state_by_device_id(device_id):
-    return None if device_id is None else http_get(f"/api/devices/{device_id}/state")
+    return None if device_id is None else gateway_get(f"/gw/devices/{device_id}/state")
 
 
 def fetch_device_state():
@@ -510,7 +515,7 @@ def fetch_device_state():
 
 
 def fetch_config():
-    data = http_get(f"/api/homes/{HOME_ID}/configs")
+    data = gateway_get(f"/gw/homes/{HOME_ID}/configs")
     if not isinstance(data, dict):
         SYS["config_error"] = True
         return
@@ -625,7 +630,7 @@ def send_one_telemetry(device_key, sensor_type, value):
         "sensorType": sensor_type,
         "value": value,
     }
-    success, _ = http_post("/api/device-telemetry", payload)
+    success, _ = gateway_post("/gw/device-telemetry", payload)
     print(f"[TELEMETRY] {sensor_type}={value} key={device_key} success={success}")
     return success
 
@@ -668,14 +673,14 @@ def normalize_target(t):
 def fetch_next_command(device_key):
     if device_key is None:
         return None
-    data = http_get(f"/api/v1/device/{device_key}/commands/next")
+    data = gateway_get(f"/gw/device/{device_key}/commands/next")
     return data if isinstance(data, dict) and data.get("id") is not None else None
 
 
 def ack_command(device_key, command_id):
     if device_key is None or command_id is None:
         return False
-    success, _ = http_post(f"/api/v1/device/{device_key}/commands/ack", {"id": command_id})
+    success, _ = gateway_post(f"/gw/device/{device_key}/commands/ack", {"id": command_id})
     return success
 
 
@@ -806,7 +811,7 @@ def boot():
     fetch_config()
     fetch_device_state()
 
-    health = yolo_get("/health", timeout=2)
+    health = gateway_get("/gw/yolo/health", timeout=YOLO_TIMEOUT)
     print("[YOLO HEALTH]", health)
 
     print("[BOOT] Done")
@@ -866,7 +871,7 @@ def main():
 
         set_door_relay(SYS["door_open"])
 
-        # ===== NETWORK TASKS: chạy độc lập, không chia lượt =====
+        # ===== NETWORK TASKS =====
         did_network = False
 
         if now - last["command"] >= intervals["command"]:
@@ -925,6 +930,7 @@ def main():
             last["debug"] = now
 
         time.sleep(0.2 if did_network else 0.5)
+
 
 if __name__ == "__main__":
     main()

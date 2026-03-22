@@ -22,6 +22,11 @@ function DashboardPage() {
     intensityDraftMap,
     controllerDevice,
     activeSegment,
+    connectionState,
+    isRealtimeConnected,
+    isRealtimeConnecting,
+    isRealtimeReconnecting,
+    isRealtimeDisconnected,
     handleToggleDevice,
     handleIntensityChange,
     handleChangeMode,
@@ -50,6 +55,22 @@ function DashboardPage() {
 
     return normalizedServerValue;
   };
+
+  const realtimeLabel = isRealtimeConnected
+    ? "Realtime connected"
+    : isRealtimeConnecting
+    ? "Realtime connecting"
+    : isRealtimeReconnecting
+    ? "Realtime reconnecting"
+    : isRealtimeDisconnected
+    ? "Realtime disconnected"
+    : connectionState;
+
+  const realtimeDotClass = isRealtimeConnected
+    ? "online"
+    : isRealtimeReconnecting || isRealtimeConnecting
+    ? "warning"
+    : "offline";
 
   return (
     <div className="dashboard-page">
@@ -124,8 +145,8 @@ function DashboardPage() {
 
               <div className="dashboard-integrations">
                 <div className="dashboard-integration-item">
-                  <span className="dashboard-status-dot online" />
-                  <span>OhStem</span>
+                  <span className={`dashboard-status-dot ${realtimeDotClass}`} />
+                  <span>{realtimeLabel}</span>
                 </div>
                 <div className="dashboard-integration-item">
                   <span className="dashboard-status-dot online" />

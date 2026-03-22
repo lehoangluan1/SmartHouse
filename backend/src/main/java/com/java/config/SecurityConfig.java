@@ -28,6 +28,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import io.jsonwebtoken.Claims;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,24 +51,19 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/error").permitAll()
-
-                        // auth public
-                        .requestMatchers("/api/auth/**").permitAll()
-
-                        // device public APIs
-                        .requestMatchers("/api/devices/home/**").permitAll()
-                        .requestMatchers("/api/devices/*/state").permitAll()
-                        .requestMatchers("/api/homes/*/configs").permitAll()
-                        .requestMatchers("/api/homes/*/alerts").permitAll()
-                        .requestMatchers("/api/device-telemetry").permitAll()
-                        .requestMatchers("/api/v1/device/**").permitAll()
-
-                        // nếu vẫn còn dùng control cũ
-                        .requestMatchers("/api/control/**").permitAll()
-
-                        .anyRequest().authenticated()
+                    .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                    .requestMatchers("/error").permitAll()
+                    .requestMatchers("/api/auth/**").permitAll()
+                    .requestMatchers("/api/devices/home/**").permitAll()
+                    .requestMatchers("/api/devices/*/state").permitAll()
+                    .requestMatchers("/api/dashboard/homes/**").permitAll()
+                    .requestMatchers("/api/homes/*/configs").permitAll()
+                    .requestMatchers("/api/homes/*/alerts").permitAll()
+                    .requestMatchers("/api/device-telemetry").permitAll()
+                    .requestMatchers("/api/v1/device/**").permitAll()
+                    .requestMatchers("/api/control/**").permitAll()
+                    .anyRequest().authenticated()
                 )
                 .addFilterBefore(new JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
                 .build();
@@ -114,6 +110,25 @@ public class SecurityConfig {
         }
 
         @Override
+        protected boolean shouldNotFilterAsyncDispatch() {
+            return true;
+        }
+
+        @Override
+        protected boolean shouldNotFilterErrorDispatch() {
+            return true;
+        }
+
+        @Override
+        protected boolean shouldNotFilter(HttpServletRequest request) {
+            String uri = request.getRequestURI();
+
+            return "OPTIONS".equalsIgnoreCase(request.getMethod())
+                    || uri.startsWith("/api/auth/")
+                    || uri.startsWith("/api/dashboard/homes/");
+        }
+
+        @Override
         protected void doFilterInternal(
                 HttpServletRequest request,
                 HttpServletResponse response,
@@ -134,9 +149,7 @@ public class SecurityConfig {
                 String role = claims.get("role", String.class);
 
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    var authorities = List.of(
-                            new SimpleGrantedAuthority("ROLE_" + role)
-                    );
+                    var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(username, null, authorities);
@@ -153,12 +166,6 @@ public class SecurityConfig {
                 response.setCharacterEncoding("UTF-8");
                 response.getWriter().write("{\"message\":\"Unauthorized\"}");
             }
-        }
-
-        @Override
-        protected boolean shouldNotFilter(HttpServletRequest request) {
-            return "OPTIONS".equalsIgnoreCase(request.getMethod())
-                    || request.getRequestURI().startsWith("/api/auth/");
         }
     }
 }

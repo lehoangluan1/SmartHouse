@@ -5,36 +5,28 @@ import math
 from flask import Flask, jsonify
 from ultralytics import YOLO
 
-# ==========================================
-# CẤU HÌNH HỆ THỐNG
-# ==========================================
 API_PORT = 5000
 DEBUG_CAMERA = False
 CAMERA_INDEX = 0
 
-# Ngưỡng
 CONFIDENCE_THRESHOLD = 0.5
-MOTION_DISTANCE_THRESHOLD = 35      # pixel
-MOTION_AREA_CHANGE_THRESHOLD = 0.18 # 18%
-STATE_TTL_SECONDS = 2.0             # nếu quá lâu không thấy người -> reset state
+MOTION_DISTANCE_THRESHOLD = 35
+MOTION_AREA_CHANGE_THRESHOLD = 0.18
+STATE_TTL_SECONDS = 2.0
 
 latest_frame = None
+latest_frame_ts = 0.0
 camera_lock = threading.Lock()
 app = Flask(__name__)
 
-# ==========================================
-# YOLO
-# ==========================================
 print("Đang tải mô hình YOLOv8...")
 model = YOLO("yolov8m.pt")
 
-# ==========================================
-# TRẠNG THÁI PHÁT HIỆN CHUYỂN ĐỘNG
-# ==========================================
 detect_lock = threading.Lock()
 last_person_centers = []
 last_person_areas = []
 last_detect_ts = 0.0
+last_api_log_ts = 0.0
 
 
 def box_center_and_area(box):
@@ -96,7 +88,7 @@ def analyze_motion(current_boxes):
 
             score = max(
                 nearest_dist / max(MOTION_DISTANCE_THRESHOLD, 1),
-                nearest_area_change / max(MOTION_AREA_CHANGE_THRESHOLD, 0.001)
+                nearest_area_change / max(MOTION_AREA_CHANGE_THRESHOLD, 0.001),
             )
             movement_score = max(movement_score, score)
 
@@ -110,11 +102,8 @@ def analyze_motion(current_boxes):
     return motion_detected, movement_score
 
 
-# ==========================================
-# CAMERA THREAD
-# ==========================================
 def camera_thread():
-    global latest_frame, DEBUG_CAMERA
+    global latest_frame, latest_frame_ts, DEBUG_CAMERA
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
@@ -133,6 +122,7 @@ def camera_thread():
 
         with camera_lock:
             latest_frame = frame.copy()
+            latest_frame_ts = time.time()
 
         if DEBUG_CAMERA:
             if not window_open:
@@ -151,12 +141,10 @@ def camera_thread():
 
 threading.Thread(target=camera_thread, daemon=True).start()
 
-# ==========================================
-# API
-# ==========================================
+
 @app.route("/check_human", methods=["GET"])
 def check_human():
-    global latest_frame
+    global latest_frame, last_api_log_ts
 
     with camera_lock:
         if latest_frame is None:
@@ -184,11 +172,14 @@ def check_human():
         is_human = human_count > 0
         motion_detected, movement_score = analyze_motion(person_boxes)
 
-        print(
-            f"[API] human={is_human} count={human_count} "
-            f"motion={motion_detected} score={movement_score:.2f} "
-            f"conf={max_confidence*100:.1f}%"
-        )
+        now = time.time()
+        if now - last_api_log_ts >= 2.0:
+            print(
+                f"[API] human={is_human} count={human_count} "
+                f"motion={motion_detected} score={movement_score:.2f} "
+                f"conf={max_confidence*100:.1f}%"
+            )
+            last_api_log_ts = now
 
         return jsonify({
             "status": "success",
@@ -204,25 +195,21 @@ def check_human():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route("/toggle_debug", methods=["GET"])
-def toggle_debug():
-    global DEBUG_CAMERA
-    DEBUG_CAMERA = not DEBUG_CAMERA
-    status_str = "ĐÃ BẬT" if DEBUG_CAMERA else "ĐÃ TẮT"
-    return jsonify({"status": "success", "message": f"Camera Debug {status_str}"}), 200
-
-
 @app.route("/health", methods=["GET"])
 def health():
     with camera_lock:
         ready = latest_frame is not None
+        frame_age = None if latest_frame_ts == 0 else round(time.time() - latest_frame_ts, 3)
+
     return jsonify({
         "status": "success",
         "camera_ready": ready,
-        "debug_camera": DEBUG_CAMERA
+        "debug_camera": DEBUG_CAMERA,
+        "model_loaded": True,
+        "last_frame_age_seconds": frame_age,
     }), 200
 
 
 if __name__ == "__main__":
     print(f"\nAPI YOLO Server chạy tại cổng {API_PORT}.")
-    app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False, threaded=True)
+    app.run(host="127.0.0.1", port=API_PORT, debug=False, use_reloader=False, threaded=True)

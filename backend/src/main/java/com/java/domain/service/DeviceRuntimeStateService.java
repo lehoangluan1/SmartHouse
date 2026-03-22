@@ -16,6 +16,8 @@ import com.java.domain.provider.DeviceRuntimeStateValueReader;
 import com.java.domain.provider.DeviceRuntimeStateWriteStrategyResolver;
 import com.java.domain.service.dto.DeviceRuntimeStateChange;
 import com.java.domain.service.dto.DeviceRuntimeStateWriteContext;
+import com.java.eventing.DomainEventBus;
+import com.java.eventing.HomeModeChangedEvent;
 import com.java.persistence.entity.DeviceEntity;
 import com.java.persistence.entity.DeviceRuntimeStateEntity;
 import com.java.persistence.entity.DeviceRuntimeStateId;
@@ -40,6 +42,8 @@ public class DeviceRuntimeStateService {
     private final DeviceRuntimeStateValueReader valueReader;
     private final RuntimeStateValueNormalizer valueNormalizer;
     private final DeviceRuntimeStateWriteStrategyResolver writeStrategyResolver;
+    private final DeviceRuntimeStateRealtimePublisher realtimePublisher;
+    private final DomainEventBus eventBus;
 
     @Transactional(readOnly = true)
     public Map<String, DeviceRuntimeStateEntity> getStateMap(Long deviceId) {
@@ -112,13 +116,17 @@ public class DeviceRuntimeStateService {
 
         DeviceRuntimeStateChange change = strategy.write(context);
 
-        return new StateWriteResult(
+        StateWriteResult result = new StateWriteResult(
                 change.entity(),
                 change.previousValue(),
                 change.nextValue(),
                 change.changed(),
                 change.historyRecorded()
         );
+
+        realtimePublisher.publishIfNeeded(device, normalizedCapabilityCode, result);
+
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -154,26 +162,49 @@ public class DeviceRuntimeStateService {
             UserEntity changedBy
     ) {
         List<DeviceEntity> devices = deviceRepository.findByHomeId(homeId);
-        String normalizedCapabilityCode = normalizeCapability(MODE_CAPABILITY);
+        String normalizedModeCapability = normalizeCapability(MODE_CAPABILITY);
+
+        Long eventDeviceId = null;
+        boolean changed = false;
 
         for (DeviceEntity device : devices) {
-            if (!deviceTargetPolicy.supportsModeSync(device)) {
+            if (!supportsModeSync(device, normalizedModeCapability)) {
                 continue;
             }
 
-            if (!capabilityRepository.existsByDevice_IdAndId_CapabilityCode(device.getId(), normalizedCapabilityCode)) {
-                continue;
-            }
-
-            applyState(
+            StateWriteResult result = applyState(
                     device.getId(),
-                    normalizedCapabilityCode,
+                    normalizedModeCapability,
                     mode,
                     source,
                     sourceRefId,
                     changedBy
             );
+
+            if (result.changed()) {
+                changed = true;
+                if (eventDeviceId == null) {
+                    eventDeviceId = device.getId();
+                }
+            }
         }
+
+        if (changed) {
+            eventBus.publish(HomeModeChangedEvent.builder()
+                    .homeId(homeId)
+                    .deviceId(eventDeviceId)
+                    .mode(normalizeModeValue(mode))
+                    .build());
+        }
+    }
+
+    private boolean supportsModeSync(DeviceEntity device, String capabilityCode) {
+        return deviceTargetPolicy.supportsModeSync(device)
+                && capabilityRepository.existsByDevice_IdAndId_CapabilityCode(device.getId(), capabilityCode);
+    }
+
+    private String normalizeModeValue(String mode) {
+        return mode == null ? null : mode.trim().toUpperCase();
     }
 
     private String normalizeCapability(String capabilityCode) {

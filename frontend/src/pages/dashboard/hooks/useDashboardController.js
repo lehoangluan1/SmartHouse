@@ -22,6 +22,9 @@ import {
   applyRealtimeEventToDashboard,
   applyRealtimeEventToMonitoring,
 } from "../../../utils/dashboardStateUtils";
+
+const DEFAULT_CONNECTION_STATE = "disconnected";
+
 export function useDashboardController({ homeId, currentUser }) {
   const [dashboardData, setDashboardData] = useState(null);
   const [activeConfig, setActiveConfig] = useState(null);
@@ -31,6 +34,11 @@ export function useDashboardController({ homeId, currentUser }) {
   const [error, setError] = useState("");
   const [selectedDeviceId, setSelectedDeviceId] = useState(null);
   const [intensityDraftMap, setIntensityDraftMap] = useState({});
+  const [connectionState, setConnectionState] = useState(
+    homeId ? "connecting" : DEFAULT_CONNECTION_STATE
+  );
+  const [lastRealtimeEventType, setLastRealtimeEventType] = useState(null);
+  const [lastRealtimeEventAt, setLastRealtimeEventAt] = useState(null);
 
   const activeConfigRef = useRef(null);
   const rawDevicesRef = useRef([]);
@@ -38,6 +46,7 @@ export function useDashboardController({ homeId, currentUser }) {
   const sseCleanupRef = useRef(null);
   const latestLoadIdRef = useRef(0);
   const mountedRef = useRef(false);
+  const hasLoadedInitiallyRef = useRef(false);
 
   const rawDevices = useMemo(
     () => (Array.isArray(dashboardData?.devices) ? dashboardData.devices : []),
@@ -64,6 +73,11 @@ export function useDashboardController({ homeId, currentUser }) {
     ? String(controllerDevice.mode).toUpperCase()
     : "AUTO";
 
+  const isRealtimeConnected = connectionState === "connected";
+  const isRealtimeConnecting = connectionState === "connecting";
+  const isRealtimeReconnecting = connectionState === "reconnecting";
+  const isRealtimeDisconnected = connectionState === "disconnected";
+
   useEffect(() => {
     activeConfigRef.current = activeConfig;
   }, [activeConfig]);
@@ -78,6 +92,14 @@ export function useDashboardController({ homeId, currentUser }) {
       pollingIntervalRef.current = null;
     }
   }, []);
+
+  const startPolling = useCallback(() => {
+    if (!homeId || pollingIntervalRef.current) return;
+
+    pollingIntervalRef.current = setInterval(() => {
+      loadDashboardRef.current?.({ silent: true });
+    }, DASHBOARD_POLL_MS);
+  }, [homeId]);
 
   const stopRealtime = useCallback(() => {
     if (typeof sseCleanupRef.current === "function") {
@@ -108,6 +130,7 @@ export function useDashboardController({ homeId, currentUser }) {
         setMonitoring([]);
         setSelectedDeviceId(null);
         setLoading(false);
+        hasLoadedInitiallyRef.current = false;
         return;
       }
 
@@ -145,6 +168,7 @@ export function useDashboardController({ homeId, currentUser }) {
         if (!mountedRef.current || loadId !== latestLoadIdRef.current) return;
 
         setMonitoring(monitoringItems);
+        hasLoadedInitiallyRef.current = true;
       } catch (err) {
         if (!mountedRef.current || loadId !== latestLoadIdRef.current) return;
 
@@ -162,19 +186,20 @@ export function useDashboardController({ homeId, currentUser }) {
     [ensureSelectedDevice, homeId]
   );
 
-  const startPolling = useCallback(() => {
-    if (!homeId || pollingIntervalRef.current) return;
+  const loadDashboardRef = useRef(loadDashboard);
 
-    pollingIntervalRef.current = setInterval(() => {
-      loadDashboard({ silent: true });
-    }, DASHBOARD_POLL_MS);
-  }, [homeId, loadDashboard]);
+  useEffect(() => {
+    loadDashboardRef.current = loadDashboard;
+  }, [loadDashboard]);
 
-  const handleRealtimeEvent = useCallback((event) => {
+  const handleRealtimeEvent = useCallback((event, eventType) => {
+    console.log("HANDLE REALTIME:", eventType, event);
     if (!event || typeof event !== "object") return;
 
-    setDashboardData((prev) => applyRealtimeEventToDashboard(prev, event));
+    setLastRealtimeEventType(eventType || event?.type || null);
+    setLastRealtimeEventAt(Date.now());
 
+    setDashboardData((prev) => applyRealtimeEventToDashboard(prev, event));
     setMonitoring((prev) =>
       applyRealtimeEventToMonitoring(
         prev,
@@ -189,16 +214,45 @@ export function useDashboardController({ homeId, currentUser }) {
     if (!homeId) return;
 
     stopRealtime();
+    setConnectionState((prev) =>
+      prev === "connected" ? prev : hasLoadedInitiallyRef.current ? "reconnecting" : "connecting"
+    );
 
     const cleanup = subscribeDashboardEvents(homeId, {
       onOpen: () => {
+        if (!mountedRef.current) return;
+        setConnectionState("connected");
         stopPolling();
       },
       onError: () => {
+        if (!mountedRef.current) return;
+      },
+      onStateChange: (state) => {
+        if (!mountedRef.current) return;
+
+        setConnectionState(state);
+
+        if (state === "connected") {
+          stopPolling();
+          return;
+        }
+
+        if (
+          state === "reconnecting" ||
+          state === "disconnected" ||
+          state === "connecting"
+        ) {
+          startPolling();
+        }
+      },
+      onHeartbeatTimeout: () => {
+        if (!mountedRef.current) return;
+        setConnectionState("reconnecting");
         startPolling();
       },
-      onMessage: (event) => {
-        handleRealtimeEvent(event);
+      onMessage: (event, eventType) => {
+        if (!mountedRef.current) return;
+        handleRealtimeEvent(event, eventType);
       },
     });
 
@@ -221,9 +275,14 @@ export function useDashboardController({ homeId, currentUser }) {
       setMonitoring([]);
       setSelectedDeviceId(null);
       setLoading(false);
+      setConnectionState(DEFAULT_CONNECTION_STATE);
+      setLastRealtimeEventType(null);
+      setLastRealtimeEventAt(null);
+      hasLoadedInitiallyRef.current = false;
       return;
     }
 
+    setConnectionState("connecting");
     loadDashboard();
     startRealtime();
     startPolling();
@@ -231,6 +290,7 @@ export function useDashboardController({ homeId, currentUser }) {
     return () => {
       stopRealtime();
       stopPolling();
+      setConnectionState(DEFAULT_CONNECTION_STATE);
     };
   }, [homeId, loadDashboard, startPolling, startRealtime, stopPolling, stopRealtime]);
 
@@ -366,6 +426,13 @@ export function useDashboardController({ homeId, currentUser }) {
     intensityDraftMap,
     controllerDevice,
     activeSegment,
+    connectionState,
+    isRealtimeConnected,
+    isRealtimeConnecting,
+    isRealtimeReconnecting,
+    isRealtimeDisconnected,
+    lastRealtimeEventType,
+    lastRealtimeEventAt,
     handleToggleDevice,
     handleIntensityChange,
     handleChangeMode,

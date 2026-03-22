@@ -13,7 +13,7 @@ function parseEventData(event) {
 
 export function subscribeDashboardEvents(
   homeId,
-  { onMessage, onOpen, onError } = {}
+  { onMessage, onOpen, onError, onStateChange } = {}
 ) {
   if (!homeId) return () => {};
 
@@ -22,27 +22,28 @@ export function subscribeDashboardEvents(
 
   const forwardEvent = (event) => {
     const payload = parseEventData(event);
-    if (payload) {
-      onMessage?.(payload);
-    }
+    if (!payload) return;
+    onMessage?.(payload, event.type);
   };
 
   eventSource.onopen = () => {
+    onStateChange?.("connected");
     onOpen?.();
   };
 
   eventSource.onerror = (error) => {
+    onStateChange?.("reconnecting");
     onError?.(error);
   };
-
-  eventSource.onmessage = forwardEvent;
 
   eventSource.addEventListener("CONNECTED", forwardEvent);
   eventSource.addEventListener("DEVICE_STATE_CHANGED", forwardEvent);
   eventSource.addEventListener("HOME_MODE_CHANGED", forwardEvent);
   eventSource.addEventListener("TELEMETRY_RECEIVED", forwardEvent);
+  eventSource.addEventListener("HEARTBEAT", forwardEvent);
 
   return () => {
+    onStateChange?.("disconnected");
     eventSource.close();
   };
 }

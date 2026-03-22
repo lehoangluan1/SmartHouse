@@ -1,0 +1,124 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: smarthouse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./backend/db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1g
+    cpus: 1.0
+
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    container_name: smarthouse-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${SPRING_RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${SPRING_RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    cpus: 0.75
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smarthouse-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=25 -XX:+UseG1GC"
+
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO}
+      JPA_OPEN_IN_VIEW: ${JPA_OPEN_IN_VIEW}
+      HIBERNATE_FORMAT_SQL: ${HIBERNATE_FORMAT_SQL}
+      JPA_SHOW_SQL: ${JPA_SHOW_SQL}
+
+      APP_JWT_SECRET: ${APP_JWT_SECRET}
+
+      APP_OFFLINE_THRESHOLD_SECONDS: ${APP_OFFLINE_THRESHOLD_SECONDS}
+      APP_SCHEDULER_ZONE: ${APP_SCHEDULER_ZONE}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
+      SPRING_RABBITMQ_HOST: ${SPRING_RABBITMQ_HOST}
+      SPRING_RABBITMQ_PORT: ${SPRING_RABBITMQ_PORT}
+      SPRING_RABBITMQ_USERNAME: ${SPRING_RABBITMQ_USERNAME}
+      SPRING_RABBITMQ_PASSWORD: ${SPRING_RABBITMQ_PASSWORD}
+
+      APP_MESSAGING_USER_QUEUE: ${APP_MESSAGING_USER_QUEUE}
+      APP_MESSAGING_USER_EXCHANGE: ${APP_MESSAGING_USER_EXCHANGE}
+      APP_MESSAGING_USER_ROUTING_KEY: ${APP_MESSAGING_USER_ROUTING_KEY}
+
+      APP_OUTBOX_PUBLISHER_FIXED_DELAY_MS: ${APP_OUTBOX_PUBLISHER_FIXED_DELAY_MS}
+      APP_OUTBOX_PUBLISHER_BATCH_SIZE: ${APP_OUTBOX_PUBLISHER_BATCH_SIZE}
+
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE}
+
+      APP_NOTIFICATION_MAIL_ENABLED: ${APP_NOTIFICATION_MAIL_ENABLED}
+      APP_NOTIFICATION_MAIL_FROM: ${APP_NOTIFICATION_MAIL_FROM}
+      APP_NOTIFICATION_MAIL_ADMIN_TO: ${APP_NOTIFICATION_MAIL_ADMIN_TO}
+
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      APP_TELEGRAM_ENABLED: ${APP_TELEGRAM_ENABLED}
+    ports:
+      - "8080:8080"
+    mem_limit: 2g
+    cpus: 2.0
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_GOOGLE_REDIRECT_URI: ${VITE_GOOGLE_REDIRECT_URI}
+    container_name: smarthouse-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    mem_limit: 256m
+    cpus: 0.5
+
+volumes:
+  postgres_data:

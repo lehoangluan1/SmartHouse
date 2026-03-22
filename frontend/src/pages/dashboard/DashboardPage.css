@@ -130,6 +130,14 @@
   font-size: 14px;
 }
 
+.dashboard-status-dot.warning {
+  background: #f59e0b;
+}
+
+.dashboard-status-dot.offline {
+  background: #ef4444;
+}
+
 /* large desktop */
 @media (min-width: 1440px) {
   .dashboard-content {
