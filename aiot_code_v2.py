@@ -127,11 +127,11 @@ DEV = {
 
 KEYS = {
   'runtime_id': None,
-  'runtime_key': None,
+  'runtime_key': 'yolobit-01',
   'fan_id': None,
-  'fan_key': None,
+  'fan_key': 'ohstem-fan-ctrl-01',
   'light_id': None,
-  'light_key': None,
+  'light_key': 'ohstem-light-ctrl-01',
   'temp_key': 'ohstem-temp-01',
   'humidity_key': 'ohstem-humidity-01',
   'light_sensor_key': 'ohstem-light-01',
@@ -249,30 +249,47 @@ def has_server_error():
 def gateway_get(path):
   resp = None
   try:
+    url = GATEWAY_BASE + path
+    print('[GET]', url)
     resp = urequests.get(
-      GATEWAY_BASE + path,
-      headers=COMMON_HEADERS,
-      timeout=HTTP_TIMEOUT
+      url,
+      headers=COMMON_HEADERS
     )
+
+    print('[GET STATUS]', resp.status_code)
+    body = resp.text
+    print('[GET BODY]', body)
+
     if ok(resp):
-      return unwrap(j(resp))
+      data = j(resp)
+      print('[GET JSON]', data)
+      return unwrap(data)
+
     return None
-  except:
+  except Exception as e:
+    print('[GET ERROR]', path, e)
     return None
   finally:
     close_resp(resp)
 
+
 def gateway_post(path, payload):
   resp = None
   try:
+    url = GATEWAY_BASE + path
+    print('[POST]', url, payload)
     resp = urequests.post(
-      GATEWAY_BASE + path,
+      url,
       json=payload,
-      headers=COMMON_HEADERS,
-      timeout=HTTP_TIMEOUT
+      headers=COMMON_HEADERS
     )
+
+    print('[POST STATUS]', resp.status_code)
+    print('[POST BODY]', resp.text)
+
     return ok(resp), resp.text if resp else None
-  except:
+  except Exception as e:
+    print('[POST ERROR]', path, e)
     return False, None
   finally:
     close_resp(resp)
@@ -309,6 +326,11 @@ def print_status():
     'door=' + str(SYS['door_open']),
     'alert=' + str(SYS['alert_active']),
     'sec=' + str(SYS['security_alert_active']),
+    'registry_err=' + str(SYS['registry_error']),
+    'state_err=' + str(SYS['state_error']),
+    'config_err=' + str(SYS['config_error']),
+    'telemetry_err=' + str(SYS['telemetry_error']),
+    'command_err=' + str(SYS['command_error']),
     'yolo_error=' + str(SYS['yolo_error'])
   )
 
@@ -368,8 +390,11 @@ def find_by_rule(devices, name):
 
 def load_device_registry():
   data = gateway_get('/gw/devices/home/' + str(HOME_ID))
+  print('[REGISTRY RAW]', data)
+
   if not isinstance(data, list) or not data:
     SYS['registry_error'] = True
+    print('[REGISTRY ERROR] invalid list, keep local keys')
     return False
 
   DEV['runtime'] = find_by_rule(data, 'runtime')
@@ -380,26 +405,37 @@ def load_device_registry():
   DEV['light_sensor'] = find_by_rule(data, 'light_sensor')
   DEV['motion'] = find_by_rule(data, 'motion')
 
+  print('[REGISTRY MATCH]',
+        'runtime=', DEV['runtime'],
+        'fan=', DEV['fan'],
+        'light=', DEV['light'],
+        'temp=', DEV['temp'],
+        'humidity=', DEV['humidity'],
+        'light_sensor=', DEV['light_sensor'],
+        'motion=', DEV['motion'])
+
   if DEV['runtime'] is None or DEV['fan'] is None or DEV['light'] is None:
     SYS['registry_error'] = True
+    print('[REGISTRY ERROR] missing runtime/fan/light')
     return False
 
   KEYS['runtime_id'] = DEV['runtime'].get('id')
-  KEYS['runtime_key'] = DEV['runtime'].get('deviceKey')
+  KEYS['runtime_key'] = DEV['runtime'].get('deviceKey') or KEYS['runtime_key']
   KEYS['fan_id'] = DEV['fan'].get('id')
-  KEYS['fan_key'] = DEV['fan'].get('deviceKey')
+  KEYS['fan_key'] = DEV['fan'].get('deviceKey') or KEYS['fan_key']
   KEYS['light_id'] = DEV['light'].get('id')
-  KEYS['light_key'] = DEV['light'].get('deviceKey')
+  KEYS['light_key'] = DEV['light'].get('deviceKey') or KEYS['light_key']
 
   if DEV['temp']:
-    KEYS['temp_key'] = DEV['temp'].get('deviceKey')
+    KEYS['temp_key'] = DEV['temp'].get('deviceKey') or KEYS['temp_key']
   if DEV['humidity']:
-    KEYS['humidity_key'] = DEV['humidity'].get('deviceKey')
+    KEYS['humidity_key'] = DEV['humidity'].get('deviceKey') or KEYS['humidity_key']
   if DEV['light_sensor']:
-    KEYS['light_sensor_key'] = DEV['light_sensor'].get('deviceKey')
+    KEYS['light_sensor_key'] = DEV['light_sensor'].get('deviceKey') or KEYS['light_sensor_key']
   if DEV['motion']:
-    KEYS['motion_key'] = DEV['motion'].get('deviceKey')
+    KEYS['motion_key'] = DEV['motion'].get('deviceKey') or KEYS['motion_key']
 
+  print('[KEYS]', KEYS)
   SYS['registry_error'] = False
   return True
 
