@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("gateway")
 
-BACKEND_BASE = os.getenv("BACKEND_BASE", "http://127.0.0.1:8080").rstrip("/")
+BACKEND_BASE = os.getenv("BACKEND_BASE", "https://smarthouse-be.onrender.com").rstrip("/")
 YOLO_BASE = os.getenv("YOLO_BASE", "http://127.0.0.1:5000").rstrip("/")
 
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "5"))
