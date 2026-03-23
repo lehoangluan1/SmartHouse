@@ -20,12 +20,12 @@ ir_rx = IR_RX(Pin(pin10.pin, Pin.IN))
 ir_rx.start()
 
 # ===== GATEWAY / SECURITY =====
-GATEWAY_HOST = '192.168.1.27'
+GATEWAY_HOST = '10.128.6.109'
 GATEWAY_PORT = 9000
 GATEWAY_BASE = 'http://{}:{}'.format(GATEWAY_HOST, GATEWAY_PORT)
 
 DEVICE_TOKEN = 'ohstem-demo-token'
-HTTP_TIMEOUT = 5000
+HTTP_TIMEOUT = 10000
 
 HOME_ID = 1
 DEVICE_NAME = 'OhStem Living Room'

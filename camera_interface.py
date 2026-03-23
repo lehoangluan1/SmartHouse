@@ -212,4 +212,4 @@ def health():
 
 if __name__ == "__main__":
     print(f"\nAPI YOLO Server chạy tại cổng {API_PORT}.")
-    app.run(host="127.0.0.1", port=API_PORT, debug=False, use_reloader=False, threaded=True)
+    app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False, threaded=True)

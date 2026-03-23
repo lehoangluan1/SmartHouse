@@ -10,7 +10,7 @@ import requests
 # THROUGH SECURE GATEWAY
 # =========================================================
 
-GATEWAY_HOST = "192.168.1.27"
+GATEWAY_HOST = "10.128.6.109"
 GATEWAY_PORT = 9000
 GATEWAY_BASE = f"http://{GATEWAY_HOST}:{GATEWAY_PORT}"
 
