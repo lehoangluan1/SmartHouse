@@ -20,7 +20,6 @@ ir_rx = IR_RX(Pin(pin10.pin, Pin.IN))
 ir_rx.start()
 
 # ===== GATEWAY / SECURITY =====
-# Device chỉ gọi gateway, KHÔNG gọi trực tiếp backend / YOLO
 GATEWAY_HOST = '192.168.1.27'
 GATEWAY_PORT = 9000
 GATEWAY_BASE = 'http://{}:{}'.format(GATEWAY_HOST, GATEWAY_PORT)
