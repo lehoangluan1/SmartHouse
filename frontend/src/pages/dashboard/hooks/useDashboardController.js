@@ -404,6 +404,8 @@ export function useDashboardController({ homeId, currentUser }) {
           actorName: currentUser?.username ?? "web-user",
           method: "app",
         });
+
+        await loadDashboard({ silent: true });
       } catch (err) {
         setError(err?.message || "Failed to change mode");
         await loadDashboard({ silent: true });
