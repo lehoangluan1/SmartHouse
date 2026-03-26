@@ -338,6 +338,8 @@ export function useDashboardController({ homeId, currentUser }) {
           actorName: currentUser?.username ?? "web-user",
           method: "app",
         });
+
+        await loadDashboard({ silent: true });
       } catch (err) {
         setError(err?.message || "Failed to control device");
         await loadDashboard({ silent: true });
@@ -375,6 +377,8 @@ export function useDashboardController({ homeId, currentUser }) {
           actorName: currentUser?.username ?? "web-user",
           method: "app",
         });
+
+        await loadDashboard({ silent: true });
       } catch (err) {
         setError(err?.message || "Failed to adjust device intensity");
         await loadDashboard({ silent: true });
@@ -384,7 +388,7 @@ export function useDashboardController({ homeId, currentUser }) {
     },
     [currentUser, loadDashboard]
   );
-
+  
   const handleChangeMode = useCallback(
     async (mode) => {
       if (!controllerDevice) return;
