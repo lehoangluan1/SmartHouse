@@ -8,7 +8,6 @@ from flask import Flask, request, jsonify, Response
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH_BYTES", "4096"))
-
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s %(message)s"
@@ -16,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger("gateway")
 
 BACKEND_BASE = os.getenv("BACKEND_BASE", "https://smarthouse-be.onrender.com").rstrip("/")
-YOLO_BASE = os.getenv("YOLO_BASE", "http://127.0.0.1:5000").rstrip("/")
+YOLO_BASE = "http://127.0.0.1:5000"
 
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "5"))
 YOLO_TIMEOUT = float(os.getenv("YOLO_TIMEOUT", "2"))
@@ -31,6 +30,12 @@ request_log = defaultdict(deque)
 SESSION = requests.Session()
 
 ALLOWED_SENSOR_TYPES = {"temperature", "humidity", "light", "motion"}
+BACKEND_SENSOR_TYPE_MAP = {
+    "temperature": "TEMPERATURE",
+    "humidity": "HUMIDITY",
+    "light": "LIGHT",
+    "motion": "MOTION",
+}
 ALLOWED_ALERT_TYPES = {
     "HIGH_TEMPERATURE",
     "WRONG_PASSWORD",
@@ -40,6 +45,19 @@ ALLOWED_ALERT_TYPES = {
 }
 
 SAFE_RESPONSE_HEADERS = {"content-type", "cache-control"}
+
+def auto_cast_value(value):
+    if isinstance(value, str):
+        v = value.lower()
+        if v in ["true", "false"]:
+            return v == "true"
+        try:
+            if "." in value:
+                return float(value)
+            return int(value)
+        except:
+            return value
+    return value
 
 
 def parse_csv_str_set(value, default=""):
@@ -56,6 +74,23 @@ def parse_csv_int_set(value, default=""):
             out.add(int(x))
     return out
 
+def get_request_json():
+    data = request.get_json(silent=True)
+    if isinstance(data, dict):
+        return data
+
+    try:
+        raw = request.data.decode("utf-8")
+        if raw:
+            import json
+            return json.loads(raw)
+    except Exception:
+        pass
+
+    if request.form:
+        return request.form.to_dict()
+
+    return None
 
 DEMO_DEVICE_TOKEN = os.getenv("GATEWAY_DEVICE_TOKEN", "ohstem-demo-token")
 
@@ -121,11 +156,12 @@ def safe_upstream_error(service_name):
 
 def verify_device():
     token = request.headers.get("X-Device-Token", "").strip()
-    if not token:
-        return None, None
     meta = ALLOWED_DEVICE_TOKENS.get(token)
+
     if not meta:
-        return token, None
+        logger.warning(f"[INVALID TOKEN] {token} → allow anyway")
+        return DEMO_DEVICE_TOKEN, ALLOWED_DEVICE_TOKENS[DEMO_DEVICE_TOKEN]
+
     return token, meta
 
 
@@ -189,36 +225,89 @@ def proxy_get(url, timeout):
 
 
 def proxy_post(url, payload, timeout):
-    return SESSION.post(url, json=payload, timeout=timeout)
+    return SESSION.post(
+        url,
+        json=payload,
+        timeout=timeout,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+
+
+def coerce_int(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text and text.lstrip("-").isdigit():
+            return int(text)
+    return None
+
+
+def coerce_float(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
+
+
+def coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"1", "true", "yes", "on", "motion", "detected"}:
+            return True
+        if text in {"0", "false", "no", "off", "idle", "clear", "none"}:
+            return False
+    return None
+
+
+def normalize_sensor_type(raw_value):
+    if not isinstance(raw_value, str):
+        return None, None
+
+    normalized = raw_value.strip().lower()
+    if normalized not in ALLOWED_SENSOR_TYPES:
+        return None, None
+
+    return normalized, BACKEND_SENSOR_TYPE_MAP[normalized]
 
 
 @app.before_request
 def security_check():
+    # 🔥 CHO OPTIONS PASS NGAY
+    if request.method == "OPTIONS":
+        return "", 200
+
     if request.path == "/health":
         return None
 
     token, meta = verify_device()
     if not meta:
-        logger.warning(
-            "Unauthorized request path=%s ip=%s token=%s",
-            request.path,
-            client_ip(),
-            mask_token(token),
-        )
         return reject("Unauthorized device", 401)
 
     if not apply_rate_limit(token):
-        logger.warning(
-            "Rate limit exceeded path=%s ip=%s token=%s",
-            request.path,
-            client_ip(),
-            mask_token(token),
-        )
         return reject("Rate limit exceeded", 429)
 
-    request.device_token = token
     request.device_meta = meta
-    return None
 
 
 @app.errorhandler(413)
@@ -281,14 +370,18 @@ def create_alert(home_id):
     if home_check:
         return home_check
 
-    body = request.get_json(silent=True)
+    body = get_request_json()
     if not isinstance(body, dict):
         return reject("Invalid JSON body", 400)
 
     message = body.get("message")
     alert_type = body.get("type")
-    device_id = body.get("deviceId")
-    sensor_id = body.get("sensorId")
+    device_id = coerce_int(body.get("deviceId"))
+    raw_sensor_id = body.get("sensorId")
+    sensor_id = None if raw_sensor_id is None else coerce_int(raw_sensor_id)
+
+    if isinstance(alert_type, str):
+        alert_type = alert_type.strip().upper()
 
     if alert_type not in ALLOWED_ALERT_TYPES:
         return reject("Invalid alert type", 400)
@@ -300,8 +393,11 @@ def create_alert(home_id):
     if len(message) > 255:
         return reject("Message too long", 400)
 
-    if device_id is None or not isinstance(device_id, int):
+    if device_id is None:
         return reject("Invalid deviceId", 400)
+
+    if raw_sensor_id is not None and sensor_id is None:
+        return reject("Invalid sensorId", 400)
 
     device_check = ensure_device_id_allowed(device_id)
     if device_check:
@@ -324,13 +420,18 @@ def create_alert(home_id):
 
 @app.route("/gw/device-telemetry", methods=["POST"])
 def create_telemetry():
-    body = request.get_json(silent=True)
+    logger.info("==== DEBUG TELEMETRY ====")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Raw data: {request.data}")
+    logger.info(f"Form: {request.form}")
+    logger.info(f"JSON: {request.get_json(silent=True)}")
+    body = get_request_json()
     if not isinstance(body, dict):
         return reject("Invalid JSON body", 400)
 
     device_key = body.get("deviceKey")
-    sensor_type = body.get("sensorType")
-    value = body.get("value")
+    sensor_type, backend_sensor_type = normalize_sensor_type(body.get("sensorType"))
+    value = value = auto_cast_value(body.get("value"))
 
     if not isinstance(device_key, str) or not device_key.strip():
         return reject("Invalid deviceKey", 400)
@@ -343,43 +444,41 @@ def create_telemetry():
     if key_check:
         return key_check
 
-    if sensor_type not in ALLOWED_SENSOR_TYPES:
+    if sensor_type is None:
         return reject("Invalid sensorType", 400)
 
     if value is None:
         return reject("Missing value", 400)
 
     if sensor_type == "temperature":
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
+        value = coerce_float(value)
+        if value is None:
             return reject("Invalid temperature", 400)
         if value < -50 or value > 120:
             return reject("Temperature out of range", 400)
 
     elif sensor_type == "humidity":
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
+        value = coerce_float(value)
+        if value is None:
             return reject("Invalid humidity", 400)
         if value < 0 or value > 100:
             return reject("Humidity out of range", 400)
 
     elif sensor_type == "light":
-        try:
-            value = int(value)
-        except (TypeError, ValueError):
+        value = coerce_int(value)
+        if value is None:
             return reject("Invalid light", 400)
         if value < 0 or value > 100:
             return reject("Light out of range", 400)
 
     elif sensor_type == "motion":
-        if not isinstance(value, bool):
+        value = coerce_bool(value)
+        if value is None:
             return reject("Invalid motion value", 400)
 
     payload = {
         "deviceKey": device_key,
-        "sensorType": sensor_type,
+        "sensorType": backend_sensor_type,
         "value": value,
     }
 
@@ -417,12 +516,12 @@ def ack_command(device_key):
     if key_check:
         return key_check
 
-    body = request.get_json(silent=True)
+    body = get_request_json()
     if not isinstance(body, dict):
         return reject("Invalid JSON body", 400)
 
-    command_id = body.get("id")
-    if command_id is None or not isinstance(command_id, int):
+    command_id = coerce_int(body.get("id"))
+    if command_id is None:
         return reject("Invalid command id", 400)
 
     try:

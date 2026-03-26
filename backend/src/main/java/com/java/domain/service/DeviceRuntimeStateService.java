@@ -14,10 +14,9 @@ import com.java.config.NotFoundException;
 import com.java.domain.provider.DeviceRuntimeStateFactory;
 import com.java.domain.provider.DeviceRuntimeStateValueReader;
 import com.java.domain.provider.DeviceRuntimeStateWriteStrategyResolver;
+import com.java.domain.provider.HomeModeChangedPublisher;
 import com.java.domain.service.dto.DeviceRuntimeStateChange;
 import com.java.domain.service.dto.DeviceRuntimeStateWriteContext;
-import com.java.eventing.DomainEventBus;
-import com.java.eventing.HomeModeChangedEvent;
 import com.java.persistence.entity.DeviceEntity;
 import com.java.persistence.entity.DeviceRuntimeStateEntity;
 import com.java.persistence.entity.DeviceRuntimeStateId;
@@ -43,7 +42,7 @@ public class DeviceRuntimeStateService {
     private final RuntimeStateValueNormalizer valueNormalizer;
     private final DeviceRuntimeStateWriteStrategyResolver writeStrategyResolver;
     private final DeviceRuntimeStateRealtimePublisher realtimePublisher;
-    private final DomainEventBus eventBus;
+    private final HomeModeChangedPublisher homeModeChangedPublisher;
 
     @Transactional(readOnly = true)
     public Map<String, DeviceRuntimeStateEntity> getStateMap(Long deviceId) {
@@ -190,11 +189,11 @@ public class DeviceRuntimeStateService {
         }
 
         if (changed) {
-            eventBus.publish(HomeModeChangedEvent.builder()
-                    .homeId(homeId)
-                    .deviceId(eventDeviceId)
-                    .mode(normalizeModeValue(mode))
-                    .build());
+            homeModeChangedPublisher.publish(
+                    homeId,
+                    eventDeviceId,
+                    normalizeModeValue(mode)
+            );
         }
     }
 

@@ -14,31 +14,48 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class HomeModeResolver {
 
+    private static final String MODE_CAPABILITY = "MODE";
+
     private final DeviceRepository deviceRepository;
     private final DeviceRuntimeStateRepository deviceRuntimeStateRepository;
 
     public SystemMode resolveHomeMode(Long homeId, SystemMode fallbackMode) {
-        SystemMode defaultMode = fallbackMode != null ? fallbackMode : SystemMode.auto;
-
-        return deviceRepository.findFirstByHomeIdAndDeviceClass(homeId, DeviceClass.CONTROLLER)
+        SystemMode controllerMode = deviceRepository.findFirstByHomeIdAndDeviceClass(homeId, DeviceClass.CONTROLLER)
                 .map(controller -> deviceRuntimeStateRepository.findByIdDeviceId(controller.getId()).stream()
-                        .filter(s -> "MODE".equalsIgnoreCase(s.getCapabilityCode()))
+                        .filter(s -> MODE_CAPABILITY.equalsIgnoreCase(s.getCapabilityCode()))
                         .findFirst()
                         .map(DeviceRuntimeStateEntity::getValueText)
-                        .map(this::parseModeSafe)
-                        .orElse(defaultMode))
-                .orElse(defaultMode);
+                        .map(value -> parseModeSafe(value, null))
+                        .orElse(null))
+                .orElse(null);
+
+        if (controllerMode != null) {
+            return controllerMode;
+        }
+
+        SystemMode anyModeInHome = deviceRepository.findByHomeId(homeId).stream()
+                .map(device -> deviceRuntimeStateRepository.findByIdDeviceId(device.getId()).stream()
+                        .filter(s -> MODE_CAPABILITY.equalsIgnoreCase(s.getCapabilityCode()))
+                        .findFirst()
+                        .map(DeviceRuntimeStateEntity::getValueText)
+                        .map(value -> parseModeSafe(value, null))
+                        .orElse(null))
+                .filter(mode -> mode != null)
+                .findFirst()
+                .orElse(null);
+
+        return anyModeInHome != null ? anyModeInHome : fallbackMode;
     }
 
-    private SystemMode parseModeSafe(String value) {
+    private SystemMode parseModeSafe(String value, SystemMode fallbackMode) {
         if (value == null || value.isBlank()) {
-            return SystemMode.auto;
+            return fallbackMode;
         }
 
         try {
             return SystemMode.valueOf(value.trim().toLowerCase());
         } catch (Exception e) {
-            return SystemMode.auto;
+            return fallbackMode;
         }
     }
 }

@@ -15,6 +15,8 @@ import com.java.persistence.entity.DeviceRuntimeStateEntity;
 public class LightAutomationPolicy {
 
     private static final String POWER_CAPABILITY = "POWER";
+    private static final String POWER_ON = "true";
+    private static final String POWER_OFF = "false";
 
     public List<AutomationDecision> decide(
             Map<String, DeviceRuntimeStateEntity> stateMap,
@@ -36,13 +38,13 @@ public class LightAutomationPolicy {
             }
 
             if (config.getLlow() != null && light < config.getLlow() && !currentLightOn) {
-                decisions.add(new AutomationDecision("light", "on", "AUTO_LIGHT_LOW"));
+                decisions.add(new AutomationDecision(POWER_CAPABILITY, POWER_ON, "AUTO_LIGHT_LOW"));
             } else if (config.getLhigh() != null && light > config.getLhigh() && currentLightOn) {
-                decisions.add(new AutomationDecision("light", "off", "AUTO_LIGHT_HIGH"));
+                decisions.add(new AutomationDecision(POWER_CAPABILITY, POWER_OFF, "AUTO_LIGHT_HIGH"));
             }
         } else if (mode == SystemMode.sleep || mode == SystemMode.away) {
             if (currentLightOn) {
-                decisions.add(new AutomationDecision("light", "off", "LIGHT_MODE_FORCE_OFF"));
+                decisions.add(new AutomationDecision(POWER_CAPABILITY, POWER_OFF, "LIGHT_MODE_FORCE_OFF"));
             }
         } else if (mode == SystemMode.manual) {
             // no-op

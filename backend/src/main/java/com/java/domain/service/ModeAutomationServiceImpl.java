@@ -3,7 +3,10 @@ package com.java.domain.service;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +21,12 @@ import com.java.persistence.repo.DeviceRepository;
 
 @Service
 public class ModeAutomationServiceImpl implements ModeAutomationService {
+
+    private static final Logger log = LoggerFactory.getLogger(ModeAutomationServiceImpl.class);
+    private static final String MODE_CAPABILITY = "MODE";
+    private static final String TEMPERATURE_SENSOR = "TEMPERATURE";
+    private static final String LIGHT_SENSOR = "LIGHT";
+    private static final Set<String> FAN_SUBTYPES = Set.of("FAN", "AIR_CONDITIONER");
 
     private final DeviceRepository deviceRepository;
     private final ConfigRepository configRepository;
@@ -74,10 +83,16 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
         Long homeId = device.getHome().getId();
         Map<String, DeviceRuntimeStateEntity> stateMap = deviceRuntimeStateService.getStateMap(device.getId());
 
-        SystemMode fallbackMode = extractMode(stateMap.get("MODE"));
+        SystemMode fallbackMode = extractMode(device.getId(), stateMap.get(MODE_CAPABILITY));
         SystemMode mode = homeModeResolver.resolveHomeMode(homeId, fallbackMode);
 
-        if (mode == SystemMode.manual && manualHoldQueryService.isHolding(device.getId())) {
+        if (mode == null) {
+            log.warn("Skipping automation for device {} because no valid mode could be resolved", device.getId());
+            return;
+        }
+
+        if (manualHoldQueryService.isHolding(device.getId())) {
+            log.debug("Skipping automation for device {} because a manual hold is active", device.getId());
             return;
         }
 
@@ -90,13 +105,13 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
                 ? fanAutomationPolicy.decide(
                         stateMap,
                         config,
-                        sensorSnapshotService.latestNumericValue(homeId, "TEMPERATURE"),
+                        sensorSnapshotService.latestNumericValue(homeId, TEMPERATURE_SENSOR),
                         mode
                 )
                 : lightAutomationPolicy.decide(
                         stateMap,
                         config,
-                        sensorSnapshotService.latestNumericValue(homeId, "LIGHT"),
+                        sensorSnapshotService.latestNumericValue(homeId, LIGHT_SENSOR),
                         mode
                 );
 
@@ -124,7 +139,7 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
 
     private boolean isFan(DeviceEntity device) {
         return isActuator(device)
-                && isSubtype(device, "FAN")
+                && isFanSubtype(device)
                 && deviceTargetPolicy.supportsPower(device)
                 && deviceTargetPolicy.supportsSpeed(device);
     }
@@ -147,15 +162,26 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
                 && subtype.equalsIgnoreCase(device.getSubtype().trim());
     }
 
-    private SystemMode extractMode(DeviceRuntimeStateEntity entity) {
+    private boolean isFanSubtype(DeviceEntity device) {
+        return device != null
+                && device.getSubtype() != null
+                && FAN_SUBTYPES.contains(device.getSubtype().trim().toUpperCase(Locale.ROOT));
+    }
+
+    private SystemMode extractMode(Long deviceId, DeviceRuntimeStateEntity entity) {
         if (entity == null || entity.getValueText() == null || entity.getValueText().isBlank()) {
-            return SystemMode.auto;
+            return null;
         }
 
         try {
             return SystemMode.valueOf(entity.getValueText().trim().toLowerCase(Locale.ROOT));
         } catch (Exception e) {
-            return SystemMode.auto;
+            log.warn(
+                    "Ignoring invalid MODE runtime state '{}' for device {}",
+                    entity.getValueText(),
+                    deviceId
+            );
+            return null;
         }
     }
 }
