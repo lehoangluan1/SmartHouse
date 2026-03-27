@@ -76,4 +76,7 @@ public class AlertEntity {
 
     @Column(name = "last_triggered_at")
     private OffsetDateTime lastTriggeredAt;
+
+    @Column(name = "last_notified_at")
+    private OffsetDateTime lastNotifiedAt;
 }

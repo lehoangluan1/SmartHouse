@@ -1,8 +1,11 @@
 package com.java.eventing;
 
+import java.time.OffsetDateTime;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.java.domain.service.AlertMessageFormatter;
 import com.java.domain.service.TelegramAlertPolicy;
@@ -30,22 +33,26 @@ public class AlertTelegramListener implements DomainEventListener<AlertActivated
     }
 
     @Override
+    @Transactional
     public void onEvent(AlertActivatedEvent event) {
-        log.info("AlertTelegramListener received event: alertId={}, type={}, newlyCreated={}",
+        log.info("AlertTelegramListener received event: alertId={}, type={}, newlyCreated={}, triggeredAt={}",
                 event == null ? null : event.getAlertId(),
                 event == null ? null : event.getType(),
-                event == null ? null : event.isNewlyCreated());
+                event == null ? null : event.isNewlyCreated(),
+                event == null ? null : event.getTriggeredAt());
 
-        if (event == null || event.getType() == null) {
+        if (event == null || event.getType() == null || event.getAlertId() == null) {
             return;
         }
+
+        OffsetDateTime now = OffsetDateTime.now();
 
         boolean shouldNotify;
         if (event.isNewlyCreated()) {
             shouldNotify = telegramAlertPolicy.shouldNotifyOnNewActive(event.getType());
         } else {
             shouldNotify = alertRepository.findById(event.getAlertId())
-                    .map(alert -> telegramAlertPolicy.shouldNotifyOnRefresh(alert, event.getType(), event.getTriggeredAt()))
+                    .map(alert -> telegramAlertPolicy.shouldNotifyOnRefresh(alert, event.getType(), now))
                     .orElse(false);
         }
 
@@ -63,12 +70,18 @@ public class AlertTelegramListener implements DomainEventListener<AlertActivated
                     .orElse("Unknown device");
         }
 
-        String text = buildMessage(event, deviceName);
+        String text = buildMessage(event, deviceName, now);
         log.info("Sending telegram for alertId={}", event.getAlertId());
         telegramNotifier.sendMessage(text);
+
+        alertRepository.findById(event.getAlertId()).ifPresent(alert -> {
+            alert.setLastNotifiedAt(now);
+            alertRepository.save(alert);
+            log.info("Marked telegram notified: alertId={}, lastNotifiedAt={}", alert.getId(), now);
+        });
     }
 
-    private String buildMessage(AlertActivatedEvent event, String deviceName) {
+    private String buildMessage(AlertActivatedEvent event, String deviceName, OffsetDateTime now) {
         StringBuilder sb = new StringBuilder();
         sb.append("🚨 SMART HOME ALERT\n");
         sb.append("Type: ").append(alertMessageFormatter.displayType(event.getType())).append("\n");
@@ -79,10 +92,7 @@ public class AlertTelegramListener implements DomainEventListener<AlertActivated
             sb.append("Message: ").append(event.getMessage()).append("\n");
         }
 
-        if (event.getTriggeredAt() != null) {
-            sb.append("Time: ").append(event.getTriggeredAt()).append("\n");
-        }
-
+        sb.append("Time: ").append(now).append("\n");
         return sb.toString();
     }
 }

@@ -1,5 +1,7 @@
 package com.java.domain.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AutoControlService {
 
+        private static final Logger log = LoggerFactory.getLogger(ModeAutomationServiceImpl.class);
         private final ControlCommandRepository controlCommandRepository;
         private final DeviceTargetPolicy deviceTargetPolicy;
         private final DeviceRuntimeStateService deviceRuntimeStateService;
@@ -35,7 +38,19 @@ public class AutoControlService {
         var command = controlCommandFactory.createSystem(device, normalizedTarget, normalizedValue);
         command = controlCommandRepository.save(command);
 
+        if (!deviceRuntimeStateService.hasChanged(device.getId(), normalizedTarget, normalizedValue)) {
+                log.info("AUTO_SKIP_NO_CHANGE deviceId={}, target={}, value={}",
+                        device.getId(), normalizedTarget, normalizedValue);
+                return false;
+        }
+
         command = controlCommandSender.sendNow(command);
+
+        if (command.getStatus() != com.java.domain.CommandStatus.SENT) {
+                log.warn("AUTO_SEND_FAILED deviceId={}, target={}, value={}, status={}",
+                        device.getId(), normalizedTarget, normalizedValue, command.getStatus());
+                return false;
+        }
 
         if (command.getStatus() != com.java.domain.CommandStatus.SENT) {
                 return false;

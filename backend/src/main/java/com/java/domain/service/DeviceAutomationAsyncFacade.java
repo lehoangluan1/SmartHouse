@@ -1,0 +1,22 @@
+package com.java.domain.service;
+
+import java.util.concurrent.CompletableFuture;
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+@Service
+public class DeviceAutomationAsyncFacade {
+
+    private final DeviceAutomationWorker deviceAutomationWorker;
+
+    public DeviceAutomationAsyncFacade(DeviceAutomationWorker deviceAutomationWorker) {
+        this.deviceAutomationWorker = deviceAutomationWorker;
+    }
+
+    @Async("automationExecutor")
+    public CompletableFuture<Void> evaluateOneDeviceAsync(Long deviceId) {
+        deviceAutomationWorker.evaluateAndApplyOneDevice(deviceId);
+        return CompletableFuture.completedFuture(null);
+    }
+}

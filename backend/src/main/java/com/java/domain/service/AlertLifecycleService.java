@@ -38,6 +38,10 @@ public class AlertLifecycleService {
         AlertEntity existing = alertRepo.findTopOpen(deviceId, sensorId, type);
 
         if (existing != null) {
+            OffsetDateTime previousTriggeredAt = existing.getLastTriggeredAt() != null
+                    ? existing.getLastTriggeredAt()
+                    : existing.getCreatedAt();
+
             existing.setLastTriggeredAt(now);
             if (message != null && !message.isBlank()) {
                 existing.setMessage(message);
@@ -54,7 +58,7 @@ public class AlertLifecycleService {
                     saved.getSensor() == null ? null : saved.getSensor().getId(),
                     saved.getType(),
                     saved.getMessage(),
-                    saved.getLastTriggeredAt(),
+                    previousTriggeredAt,
                     false
             ));
 

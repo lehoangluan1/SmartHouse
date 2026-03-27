@@ -39,26 +39,28 @@ public class TelegramAlertPolicy {
         return result;
     }
 
-    public boolean shouldNotifyOnRefresh(AlertEntity existing, AlertType type, OffsetDateTime now) {
-        if (type == null || existing == null || !TELEGRAM_TYPES.contains(type)) {
+    public boolean shouldNotifyOnRefresh(AlertEntity alert, AlertType type, OffsetDateTime now) {
+        if (type == null || alert == null || !TELEGRAM_TYPES.contains(type)) {
             return false;
         }
 
-        OffsetDateTime baseTime =
-                existing.getLastTriggeredAt() != null ? existing.getLastTriggeredAt() : existing.getCreatedAt();
+        OffsetDateTime baseTime = alert.getLastNotifiedAt();
 
         if (baseTime == null) {
+            log.info("Telegram policy refresh: type={}, alertId={}, lastNotifiedAt=null, now={}, shouldNotify=true",
+                    type, alert.getId(), now);
             return true;
         }
 
         boolean result = !baseTime.plus(RE_NOTIFY_COOLDOWN).isAfter(now);
 
         log.info(
-                "Telegram policy refresh: type={}, alertId={}, lastTriggeredAt={}, now={}, shouldNotify={}",
+                "Telegram policy refresh: type={}, alertId={}, lastNotifiedAt={}, now={}, cooldown={}, shouldNotify={}",
                 type,
-                existing.getId(),
-                existing.getLastTriggeredAt(),
+                alert.getId(),
+                baseTime,
                 now,
+                RE_NOTIFY_COOLDOWN,
                 result
         );
 
