@@ -70,12 +70,12 @@ public interface DeviceStateHistoryRepository extends JpaRepository<DeviceStateH
     @Query("""
         select max(h.createdAt)
         from DeviceStateHistoryEntity h
-        where h.device_id = :deviceId
-          and upper(h.capabilityCode) = upper(:target)
-          and upper(h.source) = 'AUTO_CONTROL'
-    """)
-    Optional<OffsetDateTime> findLastAutomationAt(
-            @Param("deviceId") Long deviceId,
-            @Param("target") String target
-    );
+        where h.deviceId = :deviceId
+        and upper(h.capabilityCode) = upper(:target)
+        and upper(h.source) = 'AUTO_CONTROL'
+        """)
+        Optional<OffsetDateTime> findLastAutomationAt(
+                @Param("deviceId") Long deviceId,
+                @Param("target") String target
+        );
 }
