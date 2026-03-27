@@ -115,8 +115,10 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
                         mode
                 );
 
+        Integer kMinutes = config.getKMinutes();
+
         for (AutomationDecision decision : decisions) {
-            if (automationCooldownService.isCoolingDown(homeId, stateMap, decision.target())) {
+            if (automationCooldownService.isCoolingDown(device.getId(), decision.target(), kMinutes)) {
                 continue;
             }
 

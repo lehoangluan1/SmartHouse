@@ -12,16 +12,15 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AutoControlService {
 
-    private final ControlCommandRepository controlCommandRepository;
-    private final DeviceTargetPolicy deviceTargetPolicy;
-    private final DeviceRuntimeStateService deviceRuntimeStateService;
-    private final ControlCommandFactory controlCommandFactory;
-    private final ControlCommandSender controlCommandSender;
-    private final ActivityLogService activityLogService;
-    private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
-
-    @Transactional
-    public boolean execute(DeviceEntity device, String target, String value, String method) {
+        private final ControlCommandRepository controlCommandRepository;
+        private final DeviceTargetPolicy deviceTargetPolicy;
+        private final DeviceRuntimeStateService deviceRuntimeStateService;
+        private final ControlCommandFactory controlCommandFactory;
+        private final ControlCommandSender controlCommandSender;
+        private final ActivityLogService activityLogService;
+        private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
+        @Transactional
+        public boolean execute(DeviceEntity device, String target, String value, String method) {
         deviceTargetPolicy.validateAutoRequest(target, value);
 
         String normalizedTarget = deviceTargetPolicy.normalizeTarget(target);
@@ -30,11 +29,17 @@ public class AutoControlService {
         deviceTargetPolicy.validateTargetForDevice(device, normalizedTarget);
 
         if (!deviceRuntimeStateService.hasChanged(device.getId(), normalizedTarget, normalizedValue)) {
-            return false;
+                return false;
         }
 
         var command = controlCommandFactory.createSystem(device, normalizedTarget, normalizedValue);
         command = controlCommandRepository.save(command);
+
+        command = controlCommandSender.sendNow(command);
+
+        if (command.getStatus() != com.java.domain.CommandStatus.SENT) {
+                return false;
+        }
 
         DeviceRuntimeStateService.StateWriteResult stateWriteResult =
                 deviceRuntimeStateService.upsertValueAndRecordHistory(
@@ -45,8 +50,6 @@ public class AutoControlService {
                         command.getId(),
                         null
                 );
-
-        controlCommandSender.sendNow(command);
 
         activityLogService.log(
                 device.getHome() != null ? device.getHome().getId() : null,
@@ -64,5 +67,5 @@ public class AutoControlService {
         );
 
         return true;
-    }
+        }
 }

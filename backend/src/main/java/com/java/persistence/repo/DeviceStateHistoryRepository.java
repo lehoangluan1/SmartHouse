@@ -4,6 +4,7 @@ import com.java.persistence.entity.DeviceStateHistoryEntity;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -64,5 +65,17 @@ public interface DeviceStateHistoryRepository extends JpaRepository<DeviceStateH
                 @Param("deviceId") Long deviceId,
                 @Param("from") OffsetDateTime from,
                 @Param("to") OffsetDateTime to
+    );
+
+    @Query("""
+        select max(h.createdAt)
+        from DeviceStateHistoryEntity h
+        where h.device_id = :deviceId
+          and upper(h.capabilityCode) = upper(:target)
+          and upper(h.source) = 'AUTO_CONTROL'
+    """)
+    Optional<OffsetDateTime> findLastAutomationAt(
+            @Param("deviceId") Long deviceId,
+            @Param("target") String target
     );
 }

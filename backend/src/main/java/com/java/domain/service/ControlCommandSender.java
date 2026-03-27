@@ -41,15 +41,17 @@ public class ControlCommandSender {
 
         ControlCommandEntity saved = controlCommandRepository.save(command);
 
-        eventBus.publish(new ControlCommandEvent(
-                saved.getId(),
-                device.getHome() != null ? device.getHome().getId() : null,
-                device.getId(),
-                device.getDeviceKey(),
-                saved.getTarget(),
-                extractValue(saved),
-                saved.getActorName()
-        ));
+        if (saved.getStatus() == CommandStatus.SENT){
+            eventBus.publish(new ControlCommandEvent(
+                    saved.getId(),
+                    device.getHome() != null ? device.getHome().getId() : null,
+                    device.getId(),
+                    device.getDeviceKey(),
+                    saved.getTarget(),
+                    extractValue(saved),
+                    saved.getActorName()
+            ));
+        }
 
         return saved;
     }

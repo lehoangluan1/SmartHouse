@@ -20,7 +20,7 @@ ir_rx = IR_RX(Pin(pin10.pin, Pin.IN))
 ir_rx.start()
 
 # ===== GATEWAY / SECURITY =====
-GATEWAY_HOST = '10.230.172.165'
+GATEWAY_HOST = '10.229.90.208'
 GATEWAY_PORT = 9000
 GATEWAY_BASE = 'http://{}:{}'.format(GATEWAY_HOST, GATEWAY_PORT)
 
