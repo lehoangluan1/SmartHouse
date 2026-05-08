@@ -65,12 +65,15 @@ public interface ControlCommandRepository extends JpaRepository<ControlCommandEn
         );
     }
 
-    ControlCommandEntity findFirstByDeviceIdAndStatusOrderByCreatedAtAsc(
+    List<ControlCommandEntity> findByDeviceIdAndStatusInOrderByCreatedAtAsc(
             Long deviceId,
-            CommandStatus status
+            Collection<CommandStatus> statuses
     );
 
-    default ControlCommandEntity findNextPending(Long deviceId) {
-        return findFirstByDeviceIdAndStatusOrderByCreatedAtAsc(deviceId, CommandStatus.PENDING);
+    default ControlCommandEntity findNextDeliverable(Long deviceId) {
+        return findByDeviceIdAndStatusInOrderByCreatedAtAsc(
+                deviceId,
+                List.of(CommandStatus.PENDING, CommandStatus.SENT)
+        ).stream().findFirst().orElse(null);
     }
 }

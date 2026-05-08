@@ -19,6 +19,7 @@ public class ControlCommandResponse {
     private String value;
     private Long actorId;
     private String actorName;
+    private String source;
     private String status;
     private OffsetDateTime createdAt;
     private OffsetDateTime sentAt;

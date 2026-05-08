@@ -25,6 +25,7 @@ public class ControlCommandMapper {
                 .value(capabilityValueSupport.commandValueAsString(entity))
                 .actorId(entity.getActor() != null ? entity.getActor().getId() : null)
                 .actorName(entity.getActorName())
+                .source(resolveSource(entity))
                 .status(entity.getStatus() != null ? entity.getStatus().name() : null)
                 .createdAt(entity.getCreatedAt())
                 .sentAt(entity.getSentAt())
@@ -47,6 +48,7 @@ public class ControlCommandMapper {
                 .value(value != null ? String.valueOf(value) : null)
                 .actorId(actorId)
                 .actorName(actorName)
+                .source(null)
                 .status(status)
                 .createdAt(OffsetDateTime.now())
                 .sentAt(null)
@@ -60,8 +62,53 @@ public class ControlCommandMapper {
         }
         return new NextCommandResponse(
                 entity.getId(),
-                entity.getTarget(),
-                capabilityValueSupport.commandValueAsString(entity)
+                entity.getDevice() != null && entity.getDevice().getHome() != null
+                        ? entity.getDevice().getHome().getId()
+                        : null,
+                entity.getDevice() != null ? entity.getDevice().getDeviceKey() : null,
+                externalTarget(entity),
+                externalValue(entity),
+                resolveSource(entity)
         );
+    }
+
+    private String externalTarget(ControlCommandEntity entity) {
+        String target = entity.getTarget();
+        if (target == null) {
+            return null;
+        }
+
+        return switch (target.trim().toUpperCase()) {
+            case "POWER" -> "power";
+            case "SPEED" -> "fan_speed";
+            case "BRIGHTNESS" -> "brightness";
+            case "MODE" -> "mode";
+            default -> target.trim().toLowerCase();
+        };
+    }
+
+    private String externalValue(ControlCommandEntity entity) {
+        if (entity != null && entity.getValueBoolean() != null) {
+            return entity.getValueBoolean() ? "on" : "off";
+        }
+        String value = capabilityValueSupport.commandValueAsString(entity);
+        return value == null ? null : value.toLowerCase();
+    }
+
+    private String resolveSource(ControlCommandEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+        if (entity.getSource() != null && !entity.getSource().isBlank()) {
+            return entity.getSource().trim().toLowerCase();
+        }
+        if (entity.getActor() != null) {
+            return "manual";
+        }
+        String actorName = entity.getActorName();
+        if (actorName != null && "SYSTEM".equalsIgnoreCase(actorName.trim())) {
+            return "system";
+        }
+        return actorName == null || actorName.isBlank() ? "system" : "manual";
     }
 }

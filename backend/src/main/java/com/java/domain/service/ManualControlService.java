@@ -22,6 +22,7 @@ public class ManualControlService {
     private final ControlCommandMapper controlCommandMapper;
     private final HomeModeResolver homeModeResolver;
     private final ManualHoldService manualHoldService;
+    private final HomeModeControlService homeModeControlService;
 
     @Transactional
     public ControlCommandResponse execute(DeviceEntity device, ControlRequest request) {
@@ -51,7 +52,14 @@ public class ManualControlService {
         SystemMode currentMode = homeModeResolver.resolveHomeMode(homeId, SystemMode.auto);
 
         if (currentMode != SystemMode.manual) {
-            deviceRuntimeStateService.syncModeForHome(homeId, SystemMode.manual.name());
+            homeModeControlService.changeMode(
+                    homeId,
+                    SystemMode.manual.name(),
+                    "manual",
+                    null,
+                    null,
+                    request.actorName()
+            );
             manualHoldService.enableManualHold(
                     device,
                     currentMode,

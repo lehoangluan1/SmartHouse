@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.java.persistence.entity.DeviceEntity;
-import com.java.persistence.repo.ControlCommandRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -15,11 +14,9 @@ import lombok.RequiredArgsConstructor;
 public class AutoControlService {
 
         private static final Logger log = LoggerFactory.getLogger(ModeAutomationServiceImpl.class);
-        private final ControlCommandRepository controlCommandRepository;
         private final DeviceTargetPolicy deviceTargetPolicy;
         private final DeviceRuntimeStateService deviceRuntimeStateService;
-        private final ControlCommandFactory controlCommandFactory;
-        private final ControlCommandSender controlCommandSender;
+        private final DeviceControlService deviceControlService;
         private final ActivityLogService activityLogService;
         private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
         @Transactional
@@ -32,39 +29,21 @@ public class AutoControlService {
         deviceTargetPolicy.validateTargetForDevice(device, normalizedTarget);
 
         if (!deviceRuntimeStateService.hasChanged(device.getId(), normalizedTarget, normalizedValue)) {
-                return false;
-        }
-
-        var command = controlCommandFactory.createSystem(device, normalizedTarget, normalizedValue);
-        command = controlCommandRepository.save(command);
-
-        if (!deviceRuntimeStateService.hasChanged(device.getId(), normalizedTarget, normalizedValue)) {
                 log.info("AUTO_SKIP_NO_CHANGE deviceId={}, target={}, value={}",
                         device.getId(), normalizedTarget, normalizedValue);
                 return false;
         }
 
-        command = controlCommandSender.sendNow(command);
+        DeviceControlService.ControlResult controlResult = deviceControlService.controlDevice(
+                device,
+                normalizedTarget,
+                normalizedValue,
+                "automation",
+                null,
+                "automation"
+        );
 
-        if (command.getStatus() != com.java.domain.CommandStatus.SENT) {
-                log.warn("AUTO_SEND_FAILED deviceId={}, target={}, value={}, status={}",
-                        device.getId(), normalizedTarget, normalizedValue, command.getStatus());
-                return false;
-        }
-
-        if (command.getStatus() != com.java.domain.CommandStatus.SENT) {
-                return false;
-        }
-
-        DeviceRuntimeStateService.StateWriteResult stateWriteResult =
-                deviceRuntimeStateService.upsertValueAndRecordHistory(
-                        device.getId(),
-                        normalizedTarget,
-                        normalizedValue,
-                        "AUTO_CONTROL",
-                        command.getId(),
-                        null
-                );
+        DeviceRuntimeStateService.StateWriteResult stateWriteResult = controlResult.stateWriteResult();
 
         activityLogService.log(
                 device.getHome() != null ? device.getHome().getId() : null,

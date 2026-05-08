@@ -26,9 +26,9 @@ public class ManualHoldService {
 
     private final ConfigRepository configRepository;
     private final ActivityLogService activityLogService;
-    private final DeviceRuntimeStateService deviceRuntimeStateService;
     private final ModeAutomationService modeAutomationService;
     private final ManualHoldQueryService manualHoldQueryService;
+    private final HomeModeControlService homeModeControlService;
 
     @Transactional
     public void enableManualHold(DeviceEntity device, SystemMode previousMode, Long actorId, String actorName) {
@@ -74,12 +74,13 @@ public class ManualHoldService {
             return false;
         }
 
-        deviceRuntimeStateService.syncModeForHome(
+        homeModeControlService.changeMode(
                 state.homeId(),
                 state.previousMode().name(),
-                "MANUAL_HOLD_RESTORE",
+                "system",
                 null,
-                null
+                null,
+                "system"
         );
 
         activityLogService.log(

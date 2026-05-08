@@ -14,6 +14,7 @@ public class SafeStateService {
     private static final String SOURCE_SAFE_STATE = "safe_state";
 
     private final DeviceRuntimeStateService deviceRuntimeStateService;
+    private final DeviceControlService deviceControlService;
 
     @Transactional
     public void applyForInvalidTelemetry(Long sourceDeviceId, ConfigEntity config, String reason) {
@@ -30,10 +31,10 @@ public class SafeStateService {
             return;
         }
 
-        Long fanId = config.getMonitoringFanDevice().getId();
+        var fan = config.getMonitoringFanDevice();
 
-        applyIfSupported(fanId, "POWER", false);
-        applyIfSupported(fanId, "SPEED", 0);
+        applyIfSupported(fan, "POWER", false);
+        applyIfSupported(fan, "SPEED", 0);
     }
 
     private void applyLightSafeState(ConfigEntity config) {
@@ -41,21 +42,26 @@ public class SafeStateService {
             return;
         }
 
-        Long lightId = config.getMonitoringLightDevice().getId();
+        var light = config.getMonitoringLightDevice();
 
-        applyIfSupported(lightId, "POWER", false);
-        applyIfSupported(lightId, "BRIGHTNESS", 0);
+        applyIfSupported(light, "POWER", false);
+        applyIfSupported(light, "BRIGHTNESS", 0);
     }
 
-    private void applyIfSupported(Long deviceId, String capabilityCode, Object value) {
+    private void applyIfSupported(com.java.persistence.entity.DeviceEntity device, String capabilityCode, Object value) {
         try {
-            deviceRuntimeStateService.applyState(
-                    deviceId,
+            if (device == null || device.getId() == null
+                    || !deviceRuntimeStateService.hasChanged(device.getId(), capabilityCode, value)) {
+                return;
+            }
+
+            deviceControlService.controlDevice(
+                    device,
                     capabilityCode,
                     value,
-                    SOURCE_SAFE_STATE,
+                    "system",
                     null,
-                    null
+                    SOURCE_SAFE_STATE
             );
         } catch (Exception ignored) {
         }

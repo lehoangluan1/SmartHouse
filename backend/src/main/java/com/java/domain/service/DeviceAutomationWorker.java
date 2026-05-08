@@ -126,7 +126,10 @@ public class DeviceAutomationWorker {
 
             synchronized (lock) {
                 boolean coolingDown = automationCooldownService.isCoolingDown(
-                        device.getId(), normalizedTarget, kMinutes
+                        device.getId(),
+                        normalizedTarget,
+                        decision.value(),
+                        kMinutes
                 );
 
                 log.info(

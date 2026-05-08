@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.java.domain.service.DeviceRuntimeStateService;
+import com.java.domain.service.HomeModeControlService;
 import com.java.domain.service.ManualHoldQueryService;
 import com.java.domain.service.ModeAutomationService;
 import com.java.domain.service.ModeScheduleSupport;
@@ -21,6 +22,7 @@ public class ModeScheduleExecutionStrategy implements ScheduleExecutionStrategy 
     private final ManualHoldQueryService manualHoldQueryService;
     private final ModeAutomationService modeAutomationService;
     private final DeviceRuntimeStateService deviceRuntimeStateService;
+    private final HomeModeControlService homeModeControlService;
     private final ModeScheduleSupport modeScheduleSupport;
 
     @Override
@@ -55,12 +57,13 @@ public class ModeScheduleExecutionStrategy implements ScheduleExecutionStrategy 
             return;
         }
 
-        deviceRuntimeStateService.syncModeForHome(
+        homeModeControlService.changeMode(
                 homeId,
                 nextMode,
-                "MODE_SCHEDULE",
+                "scheduler",
                 schedule.getId(),
-                null
+                null,
+                "scheduler"
         );
 
         modeAutomationService.evaluateAllByHome(homeId);

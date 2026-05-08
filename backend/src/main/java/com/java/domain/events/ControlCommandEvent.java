@@ -9,7 +9,7 @@ public record ControlCommandEvent(
         String deviceKey,
         String target,
         Object value,
-        String actorName
+        String source
 ) implements DomainEvent {
 
     @Override

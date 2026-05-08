@@ -1,8 +1,10 @@
 package com.java.domain.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
-import com.java.domain.service.dto.TelemetryPersistenceResult;
+import com.java.eventing.TelemetryIngestedEvent;
 
 import lombok.RequiredArgsConstructor;
 
@@ -13,55 +15,41 @@ public class TelemetryAuditService {
     private final ActivityLogService activityLogService;
     private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
 
-    public void logIngest(TelemetryPersistenceResult result, Object rawValue) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logIngest(TelemetryIngestedEvent event) {
         activityLogService.log(
-                result.device().getHome().getId(),
-                result.device().getId(),
+                event.getHomeId(),
+                event.getDeviceId(),
                 null,
                 "INGEST_TELEMETRY",
                 "device",
                 null,
                 null,
                 activityLogPayloadBuilder.telemetryPayload(
-                        result.sensorType().name(),
-                        readFromState(result),
-                        readToState(result),
-                        rawValue
+                        event.getSensorType(),
+                        event.getPreviousValue(),
+                        event.getNextValue(),
+                        event.getRawValue()
                 )
         );
     }
 
-    public void logIngestWithoutStateChange(TelemetryPersistenceResult result, Object rawValue) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logIngestWithoutStateChange(TelemetryIngestedEvent event) {
         activityLogService.log(
-                result.device().getHome().getId(),
-                result.device().getId(),
+                event.getHomeId(),
+                event.getDeviceId(),
                 null,
                 "INGEST_TELEMETRY_NO_STATE_CHANGE",
                 "device",
                 null,
                 null,
                 activityLogPayloadBuilder.telemetryPayload(
-                        result.sensorType().name(),
-                        readFromState(result),
-                        readToState(result),
-                        rawValue
+                        event.getSensorType(),
+                        event.getPreviousValue(),
+                        event.getNextValue(),
+                        event.getRawValue()
                 )
         );
-    }
-
-    private Object readFromState(TelemetryPersistenceResult result) {
-        if (result == null || result.stateWriteResult() == null) {
-            return "-";
-        }
-        Object value = result.stateWriteResult().previousValue();
-        return value == null ? "-" : value;
-    }
-
-    private Object readToState(TelemetryPersistenceResult result) {
-        if (result == null || result.stateWriteResult() == null) {
-            return "-";
-        }
-        Object value = result.stateWriteResult().nextValue();
-        return value == null ? "-" : value;
     }
 }

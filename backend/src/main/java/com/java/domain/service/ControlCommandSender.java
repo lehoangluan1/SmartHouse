@@ -9,21 +9,20 @@ import org.springframework.transaction.annotation.Transactional;
 import com.java.adapter.DeviceCommandAdapter;
 import com.java.config.BadRequestException;
 import com.java.domain.CommandStatus;
-import com.java.domain.events.ControlCommandEvent;
-import com.java.eventing.DomainEventBus;
 import com.java.persistence.entity.ControlCommandEntity;
 import com.java.persistence.entity.DeviceEntity;
 import com.java.persistence.repo.ControlCommandRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ControlCommandSender {
 
     private final List<DeviceCommandAdapter> adapters;
     private final ControlCommandRepository controlCommandRepository;
-    private final DomainEventBus eventBus;
 
     @Transactional
     public ControlCommandEntity sendNow(ControlCommandEntity command) {
@@ -34,35 +33,18 @@ public class ControlCommandSender {
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException("No suitable adapter found for device"));
 
+        log.info("COMMAND dispatch attempted method=long-poll id={}", command.getId());
         var result = adapter.send(command);
 
-        command.setStatus(result.success() ? CommandStatus.SENT : CommandStatus.FAILED);
-        command.setSentAt(OffsetDateTime.now());
-
-        ControlCommandEntity saved = controlCommandRepository.save(command);
-
-        if (saved.getStatus() == CommandStatus.SENT){
-            eventBus.publish(new ControlCommandEvent(
-                    saved.getId(),
-                    device.getHome() != null ? device.getHome().getId() : null,
-                    device.getId(),
-                    device.getDeviceKey(),
-                    saved.getTarget(),
-                    extractValue(saved),
-                    saved.getActorName()
-            ));
+        if (result.success()) {
+            command.setStatus(CommandStatus.SENT);
+            command.setSentAt(OffsetDateTime.now());
+            log.info("COMMAND dispatch success id={}", command.getId());
+        } else {
+            command.setStatus(CommandStatus.PENDING);
+            log.warn("COMMAND dispatch fail id={} message={}", command.getId(), result.message());
         }
 
-        return saved;
-    }
-
-    private String extractValue(ControlCommandEntity command) {
-        if (command.getValueBoolean() != null) {
-            return String.valueOf(command.getValueBoolean());
-        }
-        if (command.getValueNumber() != null) {
-            return String.valueOf(command.getValueNumber());
-        }
-        return command.getValueText();
+        return controlCommandRepository.save(command);
     }
 }

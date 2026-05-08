@@ -10,7 +10,6 @@ import com.java.controller.dto.ControlRequest;
 import com.java.mapper.ControlCommandMapper;
 import com.java.persistence.entity.DeviceEntity;
 import com.java.persistence.entity.UserEntity;
-import com.java.persistence.repo.ControlCommandRepository;
 import com.java.persistence.repo.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -21,11 +20,8 @@ public class DeviceCommandExecutionService {
 
     private static final String SOURCE_MANUAL_CONTROL = "MANUAL_CONTROL";
 
-    private final DeviceRuntimeStateService deviceRuntimeStateService;
     private final UserRepository userRepository;
-    private final ControlCommandFactory controlCommandFactory;
-    private final ControlCommandRepository controlCommandRepository;
-    private final ControlCommandSender controlCommandSender;
+    private final DeviceControlService deviceControlService;
     private final ActivityLogService activityLogService;
     private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
     private final ControlCommandMapper controlCommandMapper;
@@ -40,27 +36,17 @@ public class DeviceCommandExecutionService {
                                 .map(userRepository::getReferenceById)
                                 .orElse(null);
 
-        var command = controlCommandFactory.createManual(
+        DeviceControlService.ControlResult controlResult = deviceControlService.controlDevice(
                 device,
                 normalized.target(),
                 normalized.value(),
+                "manual",
                 actor,
                 request.actorName()
         );
 
-        command = controlCommandRepository.save(command);
-
-        DeviceRuntimeStateService.StateWriteResult stateWriteResult =
-                deviceRuntimeStateService.upsertValueAndRecordHistory(
-                        device.getId(),
-                        normalized.target(),
-                        normalized.value(),
-                        SOURCE_MANUAL_CONTROL,
-                        command.getId(),
-                        actor
-                );
-
-        command = controlCommandSender.sendNow(command);
+        var command = controlResult.command();
+        DeviceRuntimeStateService.StateWriteResult stateWriteResult = controlResult.stateWriteResult();
 
         activityLogService.log(
                 device.getHome() != null ? device.getHome().getId() : null,

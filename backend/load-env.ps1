@@ -4,7 +4,14 @@ param(
 )
 
 if (-not [System.IO.Path]::IsPathRooted($EnvFile)) {
-    $EnvFile = Join-Path $PSScriptRoot $EnvFile
+    $backendEnvFile = Join-Path $PSScriptRoot $EnvFile
+    $rootEnvFile = Join-Path (Split-Path $PSScriptRoot -Parent) $EnvFile
+    if (Test-Path $backendEnvFile) {
+        $EnvFile = $backendEnvFile
+    }
+    else {
+        $EnvFile = $rootEnvFile
+    }
 }
 
 if (-not (Test-Path $EnvFile)) {

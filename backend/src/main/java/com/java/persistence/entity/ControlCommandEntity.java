@@ -62,6 +62,9 @@ public class ControlCommandEntity {
     @Column(name = "actor_name", length = 128)
     private String actorName;
 
+    @Column(name = "source", length = 32)
+    private String source;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false, columnDefinition = "command_status")

@@ -1,5 +1,7 @@
 package com.java.domain.service;
 
+import java.util.Optional;
+
 import org.springframework.stereotype.Component;
 
 import com.java.config.BadRequestException;
@@ -9,6 +11,7 @@ import com.java.domain.SystemMode;
 import com.java.mapper.ControlCommandMapper;
 import com.java.persistence.entity.DeviceEntity;
 import com.java.persistence.repo.DeviceRepository;
+import com.java.persistence.repo.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -17,13 +20,14 @@ import lombok.RequiredArgsConstructor;
 public class ModeManualControlHandler {
 
     private final DeviceTargetPolicy deviceTargetPolicy;
-    private final DeviceRuntimeStateService deviceRuntimeStateService;
     private final ActivityLogService activityLogService;
     private final ActivityLogPayloadBuilder activityLogPayloadBuilder;
     private final ControlCommandMapper controlCommandMapper;
     private final ManualHoldService manualHoldService;
     private final DeviceRepository deviceRepository;
+    private final UserRepository userRepository;
     private final AutoControlService autoControlService;
+    private final HomeModeControlService homeModeControlService;
 
     public ControlCommandResponse handle(
             DeviceEntity device,
@@ -51,12 +55,17 @@ public class ModeManualControlHandler {
                 "EXPLICIT_MODE_CHANGE"
         );
 
-        deviceRuntimeStateService.syncModeForHome(
+        var actor = Optional.ofNullable(request.actorId())
+                .map(userRepository::getReferenceById)
+                .orElse(null);
+
+        var command = homeModeControlService.changeMode(
                 homeId,
                 nextMode.name(),
-                "MODE_SYNC",
+                "manual",
                 null,
-                null
+                actor,
+                request.actorName()
         );
 
         if (nextMode == SystemMode.sleep || nextMode == SystemMode.away) {
@@ -81,14 +90,7 @@ public class ModeManualControlHandler {
                 activityLogPayloadBuilder.controlPayload("mode", modeValue)
         );
 
-        return controlCommandMapper.toStatusResponse(
-                device.getId(),
-                "mode",
-                modeValue,
-                request.actorId(),
-                request.actorName(),
-                "SYNCED"
-        );
+        return controlCommandMapper.toResponse(command);
     }
 
     private boolean isLight(DeviceEntity device) {

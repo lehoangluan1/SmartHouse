@@ -17,9 +17,6 @@ import lombok.RequiredArgsConstructor;
 public class TelemetryIngestService {
 
     private final TelemetryPersistenceService telemetryPersistenceService;
-    private final TelemetryAlertService telemetryAlertService;
-    private final TelemetryAutomationService telemetryAutomationService;
-    private final TelemetryAuditService telemetryAuditService;
     private final TelemetryEventMapper telemetryEventMapper;
     private final DomainEventBus eventBus;
     private final InvalidTelemetryHandler invalidTelemetryHandler;
@@ -31,14 +28,7 @@ public class TelemetryIngestService {
             var result = telemetryPersistenceService.persist(request);
 
             eventBus.publish(telemetryEventMapper.toEvent(result, request.value()));
-            telemetryAlertService.evaluateThresholds(result, request.value());
-            telemetryAutomationService.handle(result);
 
-            if (!result.stateWriteResult().changed()) {
-                telemetryAuditService.logIngestWithoutStateChange(result, request.value());
-            } else {
-                telemetryAuditService.logIngest(result, request.value());
-            }
         } catch (InvalidTelemetryException ex) {
             deviceRepository.findByDeviceKey(request.deviceKey()).ifPresent(device ->
                     invalidTelemetryHandler.handle(device, request.sensorType(), request.value(), ex.getMessage())

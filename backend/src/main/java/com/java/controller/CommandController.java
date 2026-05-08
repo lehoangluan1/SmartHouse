@@ -20,8 +20,11 @@ public class CommandController {
     }
 
     @GetMapping("/{deviceKey}/commands/next")
-    public ResponseEntity<ApiResponse<NextCommandResponse>> next(@PathVariable String deviceKey) {
-        NextCommandResponse cmd = controlCommandService.getNextCommand(deviceKey);
+    public ResponseEntity<ApiResponse<NextCommandResponse>> next(
+            @PathVariable String deviceKey,
+            @RequestParam(required = false) Long waitMs
+    ) {
+        NextCommandResponse cmd = controlCommandService.getNextCommand(deviceKey, waitMs);
         return ResponseEntity.ok(ApiResponse.ok(cmd, cmd == null ? "No pending command" : "OK"));
     }
 

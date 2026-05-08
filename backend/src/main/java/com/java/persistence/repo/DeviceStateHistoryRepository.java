@@ -1,7 +1,5 @@
 package com.java.persistence.repo;
 
-import com.java.persistence.entity.DeviceStateHistoryEntity;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.java.persistence.entity.DeviceStateHistoryEntity;
 import com.java.persistence.repo.projection.DeviceStateHistoryView;
 
 public interface DeviceStateHistoryRepository extends JpaRepository<DeviceStateHistoryEntity, Long> {
@@ -58,24 +57,43 @@ public interface DeviceStateHistoryRepository extends JpaRepository<DeviceStateH
                 h.createdAt as createdAt
         from DeviceStateHistoryEntity h
         where h.deviceId = :deviceId
-        and h.createdAt between :from and :to
+          and h.createdAt between :from and :to
         order by h.createdAt asc
         """)
-        List<DeviceStateHistoryView> findRange(
-                @Param("deviceId") Long deviceId,
-                @Param("from") OffsetDateTime from,
-                @Param("to") OffsetDateTime to
+    List<DeviceStateHistoryView> findRange(
+            @Param("deviceId") Long deviceId,
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to
     );
 
     @Query("""
         select max(h.createdAt)
         from DeviceStateHistoryEntity h
         where h.deviceId = :deviceId
-        and upper(h.capabilityCode) = upper(:target)
-        and upper(h.source) = 'AUTO_CONTROL'
+          and upper(h.capabilityCode) = upper(:target)
+          and upper(h.source) = 'AUTO_CONTROL'
         """)
-        Optional<OffsetDateTime> findLastAutomationAt(
-                @Param("deviceId") Long deviceId,
-                @Param("target") String target
-        );
+    Optional<OffsetDateTime> findLastAutomationAt(
+            @Param("deviceId") Long deviceId,
+            @Param("target") String target
+    );
+
+    @Query("""
+        select max(h.createdAt)
+        from DeviceStateHistoryEntity h
+        where h.deviceId = :deviceId
+          and upper(h.capabilityCode) = upper(:target)
+          and upper(h.source) = 'AUTO_CONTROL'
+          and (
+                (upper(:value) = 'TRUE' and h.valueBoolean = true)
+             or (upper(:value) = 'FALSE' and h.valueBoolean = false)
+             or (h.valueNumber is not null and str(h.valueNumber) = :value)
+             or (h.valueText is not null and upper(h.valueText) = upper(:value))
+          )
+        """)
+    Optional<OffsetDateTime> findLastAutomationAt(
+            @Param("deviceId") Long deviceId,
+            @Param("target") String target,
+            @Param("value") String value
+    );
 }

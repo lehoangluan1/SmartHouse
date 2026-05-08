@@ -25,6 +25,7 @@ public class ControlCommandFactory {
         ControlCommandEntity command = base(device, target, value);
         command.setActor(actor);
         command.setActorName(actorName);
+        command.setSource("manual");
         return command;
     }
 
@@ -34,8 +35,19 @@ public class ControlCommandFactory {
             Object value,
             String actorName
     ) {
+        return createWithSource(device, target, value, actorName, "system");
+    }
+
+    public ControlCommandEntity createWithSource(
+            DeviceEntity device,
+            String target,
+            Object value,
+            String actorName,
+            String source
+    ) {
         ControlCommandEntity command = base(device, target, value);
         command.setActorName(actorName);
+        command.setSource(normalizeSource(source));
         return command;
     }
 
@@ -44,7 +56,7 @@ public class ControlCommandFactory {
             String target,
             Object value
     ) {
-        return createWithActorName(device, target, value, "SYSTEM");
+        return createWithSource(device, target, value, "SYSTEM", "system");
     }
 
     private ControlCommandEntity base(DeviceEntity device, String target, Object value) {
@@ -54,5 +66,12 @@ public class ControlCommandFactory {
         capabilityValueSupport.assignCommandValue(command, value);
         command.setStatus(CommandStatus.PENDING);
         return command;
+    }
+
+    private String normalizeSource(String source) {
+        if (source == null || source.isBlank()) {
+            return "system";
+        }
+        return source.trim().toLowerCase();
     }
 }
