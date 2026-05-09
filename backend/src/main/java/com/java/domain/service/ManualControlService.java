@@ -30,21 +30,6 @@ public class ManualControlService {
 
         NormalizedControlRequest normalized = requestNormalizer.normalize(device, request);
 
-        if (!deviceRuntimeStateService.hasChanged(
-                device.getId(),
-                normalized.target(),
-                normalized.value()
-        )) {
-            return controlCommandMapper.toStatusResponse(
-                    device.getId(),
-                    normalized.target(),
-                    normalized.value(),
-                    request.actorId(),
-                    request.actorName(),
-                    "NO_OP"
-            );
-        }
-
         if ("MODE".equals(normalized.target())) {
             return modeManualControlHandler.handle(device, request, normalized);
         }
@@ -60,11 +45,27 @@ public class ManualControlService {
                     null,
                     request.actorName()
             );
-            manualHoldService.enableManualHold(
-                    device,
-                    currentMode,
+        }
+
+        manualHoldService.enableManualHold(
+                device,
+                currentMode,
+                request.actorId(),
+                request.actorName()
+        );
+
+        if (!deviceRuntimeStateService.hasChanged(
+                device.getId(),
+                normalized.target(),
+                normalized.value()
+        )) {
+            return controlCommandMapper.toStatusResponse(
+                    device.getId(),
+                    normalized.target(),
+                    normalized.value(),
                     request.actorId(),
-                    request.actorName()
+                    request.actorName(),
+                    "NO_OP"
             );
         }
 

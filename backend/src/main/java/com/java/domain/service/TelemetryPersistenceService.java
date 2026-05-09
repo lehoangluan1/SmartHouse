@@ -1,7 +1,10 @@
 package com.java.domain.service;
 
 import java.time.OffsetDateTime;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,11 @@ public class TelemetryPersistenceService {
     private final TelemetryValueParser telemetryValueParser;
     private final TelemetryValidationService telemetryValidationService;
     private final DeviceRuntimeStateService deviceRuntimeStateService;
+    private final ConcurrentMap<Long, OffsetDateTime> lastDeviceSeenWrites = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, OffsetDateTime> lastSensorSeenWrites = new ConcurrentHashMap<>();
+
+    @Value("${app.telemetry.last-seen-throttle-ms:5000}")
+    private long lastSeenThrottleMs;
 
     @Transactional
     public TelemetryPersistenceResult persist(TelemetryIngestRequest request) {
@@ -63,19 +71,28 @@ public class TelemetryPersistenceService {
                 );
 
         OffsetDateTime now = OffsetDateTime.now();
-        device.setLastSeen(now);
-        device.setIsOnline(Boolean.TRUE);
-        if (device.getStatus() == null || device.getStatus() == EntityStatus.INACTIVE) {
-            device.setStatus(EntityStatus.ACTIVE);
+        if (shouldWriteLastSeen(lastDeviceSeenWrites, device.getId(), now)
+                || device.getIsOnline() == null
+                || !device.getIsOnline()
+                || device.getStatus() == null
+                || device.getStatus() == EntityStatus.INACTIVE) {
+            device.setLastSeen(now);
+            device.setIsOnline(Boolean.TRUE);
+            if (device.getStatus() == null || device.getStatus() == EntityStatus.INACTIVE) {
+                device.setStatus(EntityStatus.ACTIVE);
+            }
+            deviceRepository.save(device);
         }
 
-        sensor.setLastSeen(now);
-        if (sensor.getStatus() == null || sensor.getStatus() == EntityStatus.INACTIVE) {
-            sensor.setStatus(EntityStatus.ACTIVE);
+        if (shouldWriteLastSeen(lastSensorSeenWrites, sensor.getId(), now)
+                || sensor.getStatus() == null
+                || sensor.getStatus() == EntityStatus.INACTIVE) {
+            sensor.setLastSeen(now);
+            if (sensor.getStatus() == null || sensor.getStatus() == EntityStatus.INACTIVE) {
+                sensor.setStatus(EntityStatus.ACTIVE);
+            }
+            sensorRepository.save(sensor);
         }
-
-        deviceRepository.save(device);
-        sensorRepository.save(sensor);
 
         return new TelemetryPersistenceResult(
                 device,
@@ -104,5 +121,22 @@ public class TelemetryPersistenceService {
         if (data.getValueNumeric() != null) return data.getValueNumeric();
         if (data.getValueText() != null) return data.getValueText();
         throw new BadRequestException("Telemetry payload does not contain a runtime value");
+    }
+
+    private boolean shouldWriteLastSeen(
+            ConcurrentMap<Long, OffsetDateTime> writes,
+            Long id,
+            OffsetDateTime now
+    ) {
+        if (id == null) {
+            return true;
+        }
+        OffsetDateTime previous = writes.get(id);
+        if (previous != null
+                && previous.plusNanos(Math.max(0L, lastSeenThrottleMs) * 1_000_000L).isAfter(now)) {
+            return false;
+        }
+        writes.put(id, now);
+        return true;
     }
 }

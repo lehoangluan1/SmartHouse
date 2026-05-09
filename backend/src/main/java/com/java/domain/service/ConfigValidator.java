@@ -86,6 +86,8 @@ public class ConfigValidator {
         List<Long> ids = new ArrayList<>();
         addIfNotNull(ids, slots.temperatureDeviceId());
         addIfNotNull(ids, slots.humidityDeviceId());
+        addIfNotNull(ids, slots.lightSensorDeviceId());
+        addIfNotNull(ids, slots.fanDeviceId());
         addIfNotNull(ids, slots.lightDeviceId());
         addIfNotNull(ids, slots.motionDeviceId());
 
@@ -102,9 +104,30 @@ public class ConfigValidator {
                 throw new BadRequestException("Device does not belong to current home: " + deviceId);
             }
         }
+
+        validateSlotType(slots.lightSensorDeviceId(), "SENSOR_NODE", "LIGHT_NODE", "Light sensor");
+        validateSlotType(slots.fanDeviceId(), "ACTUATOR", "FAN", "Fan actuator");
+        validateSlotType(slots.lightDeviceId(), "ACTUATOR", "LIGHT", "Light actuator");
     }
 
     private void addIfNotNull(List<Long> ids, Long value) {
         if (value != null) ids.add(value);
+    }
+
+    private void validateSlotType(Long deviceId, String expectedClass, String expectedSubtype, String label) {
+        if (deviceId == null) {
+            return;
+        }
+
+        DeviceEntity device = deviceRepository.findById(deviceId)
+                .orElseThrow(() -> new BadRequestException("Device does not exist: " + deviceId));
+
+        String actualClass = device.getDeviceClass() == null ? "" : device.getDeviceClass().name();
+        String actualSubtype = device.getSubtype() == null ? "" : device.getSubtype().trim();
+
+        if (!expectedClass.equalsIgnoreCase(actualClass) || !expectedSubtype.equalsIgnoreCase(actualSubtype)) {
+            throw new BadRequestException(label + " must be " + expectedClass + "/" + expectedSubtype
+                    + ": " + deviceId);
+        }
     }
 }

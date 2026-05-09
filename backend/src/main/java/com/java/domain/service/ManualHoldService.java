@@ -42,6 +42,10 @@ public class ManualHoldService {
         int holdMinutes = resolveHoldMinutes(cfg);
 
         OffsetDateTime holdUntil = OffsetDateTime.now().plusMinutes(holdMinutes);
+        SystemMode effectivePreviousMode = manualHoldQueryService.getCurrentHold(device.getId())
+                .filter(ManualHoldState::active)
+                .map(ManualHoldState::previousMode)
+                .orElse(previousMode == null ? SystemMode.auto : previousMode);
 
         activityLogService.log(
                 homeId,
@@ -54,10 +58,10 @@ public class ManualHoldService {
                 Map.of(
                         "deviceId", device.getId(),
                         "homeId", homeId,
-                        "previousMode", previousMode.name(),
+                        "previousMode", effectivePreviousMode.name(),
                         "holdUntil", holdUntil.toString(),
                         "holdMinutes", holdMinutes,
-                        "actorName", actorName
+                        "actorName", actorName == null ? "" : actorName
                 )
         );
     }

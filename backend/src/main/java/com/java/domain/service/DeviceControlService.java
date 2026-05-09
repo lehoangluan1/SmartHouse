@@ -26,7 +26,6 @@ public class DeviceControlService {
     private final DeviceRuntimeStateService deviceRuntimeStateService;
     private final ControlCommandFactory controlCommandFactory;
     private final ControlCommandRepository controlCommandRepository;
-    private final ControlCommandSender controlCommandSender;
     private final CapabilityValueSupport capabilityValueSupport;
     private final DomainEventBus eventBus;
 
@@ -123,25 +122,20 @@ public class DeviceControlService {
                         actor
                 );
 
-        command = dispatchBestEffort(command);
         return new ControlResult(command, stateWriteResult);
-    }
-
-    private ControlCommandEntity dispatchBestEffort(ControlCommandEntity command) {
-        try {
-            return controlCommandSender.sendNow(command);
-        } catch (RuntimeException ex) {
-            log.warn("COMMAND dispatch fail id={} err={}", command.getId(), ex.getClass().getSimpleName());
-            command.setStatus(com.java.domain.CommandStatus.PENDING);
-            return controlCommandRepository.save(command);
-        }
     }
 
     private String normalizeSource(String source) {
         if (source == null || source.isBlank()) {
             return "system";
         }
-        return source.trim().toLowerCase();
+        String normalized = source.trim().toLowerCase();
+        return switch (normalized) {
+            case "manual", "automation", "scheduler", "scene", "system" -> normalized;
+            case "auto", "auto_control" -> "automation";
+            case "mode_schedule" -> "scheduler";
+            default -> "system";
+        };
     }
 
     private String sourceLabel(String source) {

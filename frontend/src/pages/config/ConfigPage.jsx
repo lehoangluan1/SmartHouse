@@ -298,7 +298,7 @@ function ConfigPage() {
   async function handleSave() {
     if (saveLockRef.current || saving || loading) return;
     if (!isDirty) return;
-    if (!validateConfig(formValues, setError)) return;
+    if (!validateConfig(formValues, devices, setError)) return;
 
     saveLockRef.current = true;
     setSaving(true);
@@ -470,7 +470,43 @@ function ConfigPage() {
   );
 }
 
-function validateConfig(values, setError) {
+function getDeviceType(device) {
+  return String(
+    device?.subtype ||
+      device?.type ||
+      device?.deviceType ||
+      ""
+  ).toUpperCase();
+}
+
+function getDeviceClass(device) {
+  return String(device?.deviceClass || device?.class || "").toUpperCase();
+}
+
+function findDevice(devices, deviceId) {
+  return (devices || []).find((device) => Number(device.id) === Number(deviceId));
+}
+
+function validateSlotDevice(devices, deviceId, expectedClass, expectedType, label, setError) {
+  if (deviceId == null) {
+    return true;
+  }
+
+  const device = findDevice(devices, deviceId);
+  if (!device) {
+    setError(`${label} is not available in this home`);
+    return false;
+  }
+
+  if (getDeviceClass(device) !== expectedClass || getDeviceType(device) !== expectedType) {
+    setError(`${label} must use ${expectedType.replace("_", " ").toLowerCase()}`);
+    return false;
+  }
+
+  return true;
+}
+
+function validateConfig(values, devices, setError) {
   if (!values?.name?.trim()) {
     setError("Config name must not be blank");
     return false;
@@ -498,6 +534,45 @@ function validateConfig(values, setError) {
 
   if (new Set(ids).size !== ids.length) {
     setError("Monitoring slots must not have duplicate devices");
+    return false;
+  }
+
+  if (
+    !validateSlotDevice(
+      devices,
+      slots.lightSensorDeviceId,
+      "SENSOR_NODE",
+      "LIGHT_NODE",
+      "Light sensor",
+      setError
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !validateSlotDevice(
+      devices,
+      slots.fanDeviceId,
+      "ACTUATOR",
+      "FAN",
+      "Fan device",
+      setError
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !validateSlotDevice(
+      devices,
+      slots.lightDeviceId,
+      "ACTUATOR",
+      "LIGHT",
+      "Light device",
+      setError
+    )
+  ) {
     return false;
   }
 

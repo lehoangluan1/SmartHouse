@@ -13,6 +13,8 @@ public interface DeviceRepository extends JpaRepository<DeviceEntity, Long> {
 
     Optional<DeviceEntity> findByDeviceKey(String deviceKey);
 
+    List<DeviceEntity> findByDeviceKeyIn(List<String> deviceKeys);
+
     List<DeviceEntity> findByHomeId(Long homeId);
 
     List<DeviceEntity> findByLastSeenBefore(OffsetDateTime threshold);

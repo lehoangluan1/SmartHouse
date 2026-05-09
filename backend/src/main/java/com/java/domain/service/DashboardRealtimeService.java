@@ -3,7 +3,15 @@ package com.java.domain.service;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -16,9 +24,29 @@ import lombok.extern.slf4j.Slf4j;
 public class DashboardRealtimeService {
 
     private static final long SSE_TIMEOUT = 0L;
+    private static final long TELEMETRY_COALESCE_MS = 150L;
 
     private final DashboardSseSessionRegistry sessionRegistry;
     private final DashboardRealtimePayloadBuilder payloadBuilder;
+    private final ThreadPoolExecutor sendExecutor = new ThreadPoolExecutor(
+            2,
+            4,
+            30,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(1000),
+            runnable -> {
+                Thread thread = new Thread(runnable, "dashboard-sse-send");
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.DiscardPolicy()
+    );
+    private final ScheduledExecutorService coalesceScheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "dashboard-sse-coalesce");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ConcurrentMap<String, PendingEvent> pendingTelemetry = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(Long homeId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
@@ -56,11 +84,7 @@ public class DashboardRealtimeService {
             return;
         }
 
-        for (SseEmitter emitter : emitters) {
-            if (!send(homeId, emitter, eventName, payload)) {
-                cleanupEmitter(homeId, emitter, null);
-            }
-        }
+        sendExecutor.execute(() -> sendToEmitters(homeId, eventName, payload));
     }
 
     public void publishTelemetryReceived(
@@ -75,8 +99,9 @@ public class DashboardRealtimeService {
             return;
         }
 
-        publish(
+        coalescedPublish(
                 homeId,
+                deviceId,
                 "TELEMETRY_RECEIVED",
                 payloadBuilder.telemetryReceived(
                         homeId,
@@ -127,9 +152,44 @@ public class DashboardRealtimeService {
             List<SseEmitter> emitters = entry.getValue();
 
             for (SseEmitter emitter : emitters) {
-                if (!send(homeId, emitter, "HEARTBEAT", payloadBuilder.heartbeat(homeId))) {
-                    cleanupEmitter(homeId, emitter, null);
-                }
+                sendExecutor.execute(() -> {
+                    if (!send(homeId, emitter, "HEARTBEAT", payloadBuilder.heartbeat(homeId))) {
+                        cleanupEmitter(homeId, emitter, null);
+                    }
+                });
+            }
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        sendExecutor.shutdownNow();
+        coalesceScheduler.shutdownNow();
+    }
+
+    private void coalescedPublish(Long homeId, Long deviceId, String eventName, Object payload) {
+        String key = homeId + ":" + deviceId + ":" + eventName;
+        PendingEvent next = new PendingEvent(homeId, eventName, payload, false);
+        PendingEvent previous = pendingTelemetry.put(key, next);
+        if (previous != null && previous.scheduled()) {
+            pendingTelemetry.put(key, new PendingEvent(homeId, eventName, payload, true));
+            return;
+        }
+
+        pendingTelemetry.put(key, new PendingEvent(homeId, eventName, payload, true));
+        coalesceScheduler.schedule(() -> {
+            PendingEvent event = pendingTelemetry.remove(key);
+            if (event != null) {
+                publish(event.homeId(), event.eventName(), event.payload());
+            }
+        }, TELEMETRY_COALESCE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private void sendToEmitters(Long homeId, String eventName, Object payload) {
+        List<SseEmitter> emitters = sessionRegistry.get(homeId);
+        for (SseEmitter emitter : emitters) {
+            if (!send(homeId, emitter, eventName, payload)) {
+                cleanupEmitter(homeId, emitter, null);
             }
         }
     }
@@ -166,5 +226,8 @@ public class DashboardRealtimeService {
 
     private void removeEmitter(Long homeId, SseEmitter emitter) {
         sessionRegistry.remove(homeId, emitter);
+    }
+
+    private record PendingEvent(Long homeId, String eventName, Object payload, boolean scheduled) {
     }
 }

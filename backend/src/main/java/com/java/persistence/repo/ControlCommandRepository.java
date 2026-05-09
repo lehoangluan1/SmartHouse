@@ -3,8 +3,11 @@ package com.java.persistence.repo;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.java.domain.CommandStatus;
 import com.java.persistence.entity.ControlCommandEntity;
@@ -65,15 +68,29 @@ public interface ControlCommandRepository extends JpaRepository<ControlCommandEn
         );
     }
 
-    List<ControlCommandEntity> findByDeviceIdAndStatusInOrderByCreatedAtAsc(
+    Optional<ControlCommandEntity> findFirstByDeviceIdAndStatusInOrderByCreatedAtAsc(
             Long deviceId,
             Collection<CommandStatus> statuses
     );
 
-    default ControlCommandEntity findNextDeliverable(Long deviceId) {
-        return findByDeviceIdAndStatusInOrderByCreatedAtAsc(
-                deviceId,
-                List.of(CommandStatus.PENDING, CommandStatus.SENT)
-        ).stream().findFirst().orElse(null);
-    }
+    @Query(value = """
+            SELECT *
+            FROM public.control_commands
+            WHERE device_id = :deviceId
+              AND (
+                status = 'PENDING'::public.command_status
+                OR (
+                  status = 'SENT'::public.command_status
+                  AND sent_at IS NOT NULL
+                  AND sent_at <= :redeliverBefore
+                )
+              )
+            ORDER BY created_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    Optional<ControlCommandEntity> findNextDeliverableForUpdate(
+            @Param("deviceId") Long deviceId,
+            @Param("redeliverBefore") OffsetDateTime redeliverBefore
+    );
 }

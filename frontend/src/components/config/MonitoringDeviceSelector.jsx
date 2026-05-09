@@ -9,6 +9,17 @@ function getDeviceType(device) {
   ).toUpperCase();
 }
 
+function getDeviceClass(device) {
+  return String(device?.deviceClass || device?.class || "").toUpperCase();
+}
+
+function matchesDevice(device, expectedClass, expectedType) {
+  return (
+    getDeviceClass(device) === expectedClass &&
+    getDeviceType(device) === expectedType
+  );
+}
+
 function getDeviceLabel(device) {
   const name = device?.name || `Device #${device?.id ?? ""}`;
   const room = device?.roomName?.trim();
@@ -24,32 +35,32 @@ function MonitoringDeviceSelector({
   onCreateDevice,
 }) {
   const temperatureDevices = useMemo(
-    () => devices.filter((device) => getDeviceType(device) === "TEMPERATURE_NODE"),
+    () => devices.filter((device) => matchesDevice(device, "SENSOR_NODE", "TEMPERATURE_NODE")),
     [devices]
   );
 
   const humidityDevices = useMemo(
-    () => devices.filter((device) => getDeviceType(device) === "HUMIDITY_NODE"),
+    () => devices.filter((device) => matchesDevice(device, "SENSOR_NODE", "HUMIDITY_NODE")),
     [devices]
   );
 
   const lightSensorDevices = useMemo(
-    () => devices.filter((device) => getDeviceType(device) === "LIGHT_NODE"),
+    () => devices.filter((device) => matchesDevice(device, "SENSOR_NODE", "LIGHT_NODE")),
     [devices]
   );
 
   const motionDevices = useMemo(
-    () => devices.filter((device) => getDeviceType(device) === "MOTION_NODE"),
+    () => devices.filter((device) => matchesDevice(device, "SENSOR_NODE", "MOTION_NODE")),
     [devices]
   );
 
   const fanDevices = useMemo(
-    () => devices.filter((device) => getDeviceType(device) === "FAN"),
+    () => devices.filter((device) => matchesDevice(device, "ACTUATOR", "FAN")),
     [devices]
   );
 
   const lightDevices = useMemo(
-    () => devices.filter((device) => getDeviceType(device) === "LIGHT"),
+    () => devices.filter((device) => matchesDevice(device, "ACTUATOR", "LIGHT")),
     [devices]
   );
 

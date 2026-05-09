@@ -3,6 +3,8 @@ package com.java.domain.service;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -32,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 public class DeviceRuntimeStateService {
 
     private static final String MODE_CAPABILITY = "MODE";
+    private static final long CAPABILITY_CACHE_TTL_NANOS = 60_000_000_000L;
 
     private final DeviceRepository deviceRepository;
     private final DeviceRuntimeStateRepository runtimeStateRepository;
@@ -43,6 +46,7 @@ public class DeviceRuntimeStateService {
     private final DeviceRuntimeStateWriteStrategyResolver writeStrategyResolver;
     private final DeviceRuntimeStateRealtimePublisher realtimePublisher;
     private final HomeModeChangedPublisher homeModeChangedPublisher;
+    private final ConcurrentMap<String, CapabilityCacheEntry> capabilityExistsCache = new ConcurrentHashMap<>();
 
     @Transactional(readOnly = true)
     public Map<String, DeviceRuntimeStateEntity> getStateMap(Long deviceId) {
@@ -132,7 +136,7 @@ public class DeviceRuntimeStateService {
     public boolean hasChanged(Long deviceId, String capabilityCode, Object nextValue) {
         String normalizedCapabilityCode = normalizeCapability(capabilityCode);
 
-        if (!capabilityRepository.existsByDevice_IdAndId_CapabilityCode(deviceId, normalizedCapabilityCode)) {
+        if (!capabilityExists(deviceId, normalizedCapabilityCode)) {
             return false;
         }
 
@@ -222,13 +226,26 @@ public class DeviceRuntimeStateService {
     }
 
     private void validateCapabilityExists(Long deviceId, String capabilityCode) {
-        boolean exists = capabilityRepository.existsByDevice_IdAndId_CapabilityCode(deviceId, capabilityCode);
+        boolean exists = capabilityExists(deviceId, capabilityCode);
 
         if (!exists) {
             throw new BadRequestException(
                     "Capability " + capabilityCode + " is not configured for device " + deviceId
             );
         }
+    }
+
+    private boolean capabilityExists(Long deviceId, String capabilityCode) {
+        String key = deviceId + ":" + capabilityCode;
+        long now = System.nanoTime();
+        CapabilityCacheEntry cached = capabilityExistsCache.get(key);
+        if (cached != null && now - cached.loadedAtNanos() <= CAPABILITY_CACHE_TTL_NANOS) {
+            return cached.exists();
+        }
+
+        boolean exists = capabilityRepository.existsByDevice_IdAndId_CapabilityCode(deviceId, capabilityCode);
+        capabilityExistsCache.put(key, new CapabilityCacheEntry(exists, now));
+        return exists;
     }
 
     private DeviceRuntimeStateEntity getOrCreateState(DeviceEntity device, String capabilityCode) {
@@ -245,5 +262,8 @@ public class DeviceRuntimeStateService {
             boolean changed,
             boolean historyRecorded
     ) {
+    }
+
+    private record CapabilityCacheEntry(boolean exists, long loadedAtNanos) {
     }
 }

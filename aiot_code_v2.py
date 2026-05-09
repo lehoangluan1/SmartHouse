@@ -16,9 +16,13 @@ button_a.on_pressed_ab=button_b.on_pressed_ab=-1
 rgb=RGBLed(pin1.pin,4);lcd=LCD1602();dht=DHT20()
 ir=IR_RX(Pin(pin10.pin,Pin.IN));ir.start()
 
-HOST='10.230.172.165';PORT=9000
+try:
+  from aiot_local_config import GATEWAY_HOST,GATEWAY_PORT,HOME_ID,DEVICE_TOKEN,WIFI_SSID,WIFI_PASS,RUNTIME_DEVICE_ID
+except:
+  GATEWAY_HOST='127.0.0.1';GATEWAY_PORT=9000;HOME_ID=1;DEVICE_TOKEN='ohstem-demo-token';WIFI_SSID='Test';WIFI_PASS='12345678';RUNTIME_DEVICE_ID=1
+HOST=GATEWAY_HOST;PORT=GATEWAY_PORT
 BASE='http://%s:%s'%(HOST,PORT)
-HDR={'X-Device-Token':'ohstem-demo-token','Content-Type':'application/json'}
+HDR={'X-Device-Token':DEVICE_TOKEN,'Content-Type':'application/json'}
 
 DOOR_PASS='123456';MAX_FAIL=3;DOOR_MS=5000
 
@@ -141,7 +145,7 @@ def ir_proc():
       SYS['failed']+=1
       if SYS['failed']>=MAX_FAIL:
         SYS['security_alert_active']=1
-        post('/gw/homes/1/alerts',{"type":"WRONG_PASSWORD"})
+        post('/gw/homes/%s/alerts'%HOME_ID,{"deviceId":RUNTIME_DEVICE_ID,"sensorId":None,"type":"WRONG_PASSWORD","message":"Nhap sai mat khau"})
     SYS['ir_pass']=''
   ir.clear_code()
 
@@ -159,7 +163,7 @@ def debug():
   'light',SYS['light_status'],'door',SYS['door_open'],'err',has_err())
 
 # ===== BOOT =====
-mqtt.connect_wifi('Test','12345678')
+mqtt.connect_wifi(WIFI_SSID,WIFI_PASS)
 lcd.backlight_on();lcd.clear();lcd.putstr('Smart House')
 SYS['boot']=time.ticks_ms()
 
@@ -179,7 +183,7 @@ while True:
   motion();logic()
 
   if SYS['nhiet_do']!=None and SYS['nhiet_do']>CFG['Tcritical']:
-    post('/gw/homes/1/alerts',{"type":"HIGH_TEMP"})
+    post('/gw/homes/%s/alerts'%HOME_ID,{"deviceId":RUNTIME_DEVICE_ID,"sensorId":None,"type":"HIGH_TEMPERATURE","message":"Nhiet do cao"})
 
   if time.ticks_diff(now,last['dbg'])>5000:
     debug();last['dbg']=now

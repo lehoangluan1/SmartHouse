@@ -1,7 +1,12 @@
 package com.java.domain.service;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +34,8 @@ public class ControlCommandService {
     private final ControlCommandMapper controlCommandMapper;
     private final ControlCommandFactory controlCommandFactory;
     private final CapabilityValueSupport capabilityValueSupport;
-    private final CommandLongPollNotifier commandLongPollNotifier;
+    private final long maxLongPollWaitMs;
+    private final long redeliveryTimeoutMs;
 
     public ControlCommandService(
             DeviceRepository deviceRepo,
@@ -39,7 +45,8 @@ public class ControlCommandService {
             ControlCommandMapper controlCommandMapper,
             ControlCommandFactory controlCommandFactory,
             CapabilityValueSupport capabilityValueSupport,
-            CommandLongPollNotifier commandLongPollNotifier
+            @Value("${app.command.long-poll.max-wait-ms:2000}") long maxLongPollWaitMs,
+            @Value("${app.command.redelivery-timeout-ms:15000}") long redeliveryTimeoutMs
     ) {
         this.deviceRepo = deviceRepo;
         this.cmdRepo = cmdRepo;
@@ -48,7 +55,8 @@ public class ControlCommandService {
         this.controlCommandMapper = controlCommandMapper;
         this.controlCommandFactory = controlCommandFactory;
         this.capabilityValueSupport = capabilityValueSupport;
-        this.commandLongPollNotifier = commandLongPollNotifier;
+        this.maxLongPollWaitMs = Math.max(0L, maxLongPollWaitMs);
+        this.redeliveryTimeoutMs = Math.max(0L, redeliveryTimeoutMs);
     }
 
     @Transactional
@@ -111,36 +119,82 @@ public class ControlCommandService {
 
     @Transactional
     public NextCommandResponse getNextCommand(String deviceKey) {
-        return getNextCommand(deviceKey, 0L);
+        return getNextCommandImmediate(deviceKey);
     }
 
     @Transactional
     public NextCommandResponse getNextCommand(String deviceKey, Long waitMs) {
+        return getNextCommandImmediate(deviceKey);
+    }
+
+    @Transactional
+    public NextCommandResponse getNextCommandImmediate(String deviceKey) {
         DeviceEntity device = deviceRepo.findByDeviceKey(deviceKey)
                 .orElseThrow(() -> new NotFoundException("Device does not exist: " + deviceKey));
 
-        ControlCommandEntity cmd = findNextDeliverable(device);
-        if (cmd == null && waitMs != null && waitMs > 0) {
-            commandLongPollNotifier.await(deviceKey, Math.min(waitMs, 5000L));
-            cmd = findNextDeliverable(device);
-        }
-
+        ControlCommandEntity cmd = claimNextDeliverable(device);
         return cmd == null ? null : controlCommandMapper.toNextResponse(cmd);
     }
 
-    private ControlCommandEntity findNextDeliverable(DeviceEntity device) {
-        ControlCommandEntity cmd = cmdRepo.findNextDeliverable(device.getId());
+    @Transactional
+    public Map<String, NextCommandResponse> getNextCommandsImmediate(Collection<String> deviceKeys) {
+        LinkedHashMap<String, NextCommandResponse> out = new LinkedHashMap<>();
+        if (deviceKeys == null || deviceKeys.isEmpty()) {
+            return out;
+        }
+
+        List<String> keys = deviceKeys.stream()
+                .filter(key -> key != null && !key.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+        keys.forEach(key -> out.put(key, null));
+
+        Map<String, DeviceEntity> devicesByKey = new LinkedHashMap<>();
+        for (DeviceEntity device : deviceRepo.findByDeviceKeyIn(keys)) {
+            devicesByKey.put(device.getDeviceKey(), device);
+        }
+
+        for (String key : keys) {
+            DeviceEntity device = devicesByKey.get(key);
+            if (device == null) {
+                continue;
+            }
+            ControlCommandEntity cmd = claimNextDeliverable(device);
+            out.put(key, cmd == null ? null : controlCommandMapper.toNextResponse(cmd));
+        }
+
+        return out;
+    }
+
+    public long clampWaitMs(Long waitMs) {
+        if (waitMs == null || waitMs <= 0) {
+            return 0L;
+        }
+        return Math.min(waitMs, maxLongPollWaitMs);
+    }
+
+    private ControlCommandEntity claimNextDeliverable(DeviceEntity device) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime redeliverBefore = now.minusNanos(redeliveryTimeoutMs * 1_000_000L);
+        ControlCommandEntity cmd = cmdRepo.findNextDeliverableForUpdate(device.getId(), redeliverBefore)
+                .orElse(null);
         if (cmd == null) {
             return null;
         }
 
-        if (cmd.getStatus() == CommandStatus.PENDING) {
-            cmd.setStatus(CommandStatus.SENT);
-            if (cmd.getSentAt() == null) {
-                cmd.setSentAt(OffsetDateTime.now());
-            }
-            cmd = cmdRepo.save(cmd);
-        }
+        cmd.setStatus(CommandStatus.SENT);
+        cmd.setSentAt(now);
+        cmd = cmdRepo.save(cmd);
+
+        log.info(
+                "COMMAND route key={} id={} target={} value={} status={}",
+                device.getDeviceKey(),
+                cmd.getId(),
+                controlCommandMapper.externalTarget(cmd),
+                controlCommandMapper.externalValue(cmd),
+                cmd.getStatus()
+        );
 
         return cmd;
     }
@@ -204,7 +258,7 @@ public class ControlCommandService {
             case "manual", "automation", "scheduler", "scene", "system" -> normalized;
             case "auto", "auto_control" -> "automation";
             case "mode_schedule" -> "scheduler";
-            default -> normalized;
+            default -> "manual";
         };
     }
 }

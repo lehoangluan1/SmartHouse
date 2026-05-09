@@ -72,7 +72,7 @@ public class ControlCommandMapper {
         );
     }
 
-    private String externalTarget(ControlCommandEntity entity) {
+    public String externalTarget(ControlCommandEntity entity) {
         String target = entity.getTarget();
         if (target == null) {
             return null;
@@ -87,7 +87,7 @@ public class ControlCommandMapper {
         };
     }
 
-    private String externalValue(ControlCommandEntity entity) {
+    public String externalValue(ControlCommandEntity entity) {
         if (entity != null && entity.getValueBoolean() != null) {
             return entity.getValueBoolean() ? "on" : "off";
         }

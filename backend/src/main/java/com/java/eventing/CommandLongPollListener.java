@@ -26,12 +26,11 @@ public class CommandLongPollListener implements DomainEventListener<ControlComma
             return;
         }
 
-        log.info("COMMAND dispatch attempted method=long-poll id={}", event.commandId());
         int waiters = commandLongPollNotifier.signal(event.deviceKey());
         if (waiters > 0) {
-            log.info("COMMAND dispatch success id={}", event.commandId());
+            log.debug("COMMAND long-poll signalled id={} waiters={}", event.commandId(), waiters);
         } else {
-            log.debug("COMMAND dispatch success id={} waiters=0", event.commandId());
+            log.debug("COMMAND long-poll signalled id={} waiters=0", event.commandId());
         }
     }
 }
