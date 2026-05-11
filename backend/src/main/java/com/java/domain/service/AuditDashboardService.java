@@ -5,15 +5,14 @@ import com.java.controller.dto.AuditConfigChangeItem;
 import com.java.controller.dto.AuditDashboardResponse;
 import com.java.controller.dto.AuditEventItem;
 import com.java.controller.dto.PageResponse;
-import com.java.domain.provider.AuditSourceProvider;
 import com.java.domain.service.dto.AuditQuery;
-import com.java.domain.service.dto.AuditSourceResult;
+import com.java.mapper.ActivityAuditEventMapper;
+import com.java.mapper.ActivityConfigChangeMapper;
+import com.java.persistence.repo.ActivityLogRepository;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuditDashboardService {
 
     private final AuditQueryValidator validator;
-    private final List<AuditSourceProvider> providers;
-    private final AuditFilterService filterService;
-    private final AuditSummaryAssembler summaryAssembler;
-    private final PaginationService paginationService;
+    private final ActivityLogRepository activityLogRepository;
+    private final ActivityConfigChangeMapper configChangeMapper;
+    private final ActivityAuditEventMapper eventMapper;
 
     @Transactional(readOnly = true)
     public AuditDashboardResponse getAuditDashboard(
@@ -55,45 +53,98 @@ public class AuditDashboardService {
 
         validator.validate(query);
 
-        List<AuditConfigChangeItem> allConfigChanges = new ArrayList<>();
-        List<AuditEventItem> allEvents = new ArrayList<>();
+        String normalizedConfigKeyword = normalizeKeyword(query.configKeyword());
+        String normalizedEventKeyword = normalizeKeyword(query.eventKeyword());
+        String normalizedEventCategory = normalizeCategory(query.eventCategory());
 
-        for (AuditSourceProvider provider : providers) {
-            AuditSourceResult result = provider.fetch(query);
-            allConfigChanges.addAll(result.configChanges());
-            allEvents.addAll(result.events());
-        }
+        var configPageRows = activityLogRepository.findAuditConfigChanges(
+                query.homeId(),
+                query.from(),
+                query.to(),
+                normalizedConfigKeyword,
+                PageRequest.of(query.configPage(), query.configSize())
+        );
 
-        allConfigChanges = allConfigChanges.stream()
-                .sorted(Comparator.comparing(
-                        AuditConfigChangeItem::getCreatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder())
-                ))
-                .toList();
+        var eventPageRows = activityLogRepository.findAuditEvents(
+                query.homeId(),
+                query.from(),
+                query.to(),
+                normalizedEventCategory,
+                normalizedEventKeyword,
+                PageRequest.of(query.eventPage(), query.eventSize())
+        );
 
-        allEvents = allEvents.stream()
-                .sorted(Comparator.comparing(
-                        AuditEventItem::getCreatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder())
-                ))
-                .toList();
+        PageResponse<AuditConfigChangeItem> configPageResponse = PageResponse.of(
+                configPageRows.getContent().stream().map(configChangeMapper::map).toList(),
+                query.configPage(),
+                query.configSize(),
+                configPageRows.getTotalElements()
+        );
 
-        List<AuditConfigChangeItem> filteredConfigChanges =
-                filterService.filterConfigChanges(allConfigChanges, query.configKeyword());
-
-        List<AuditEventItem> filteredEvents =
-                filterService.filterEvents(allEvents, query.eventKeyword(), query.eventCategory());
-
-        PageResponse<AuditConfigChangeItem> configPageResponse =
-                paginationService.paginate(filteredConfigChanges, query.configPage(), query.configSize());
-
-        PageResponse<AuditEventItem> eventPageResponse =
-                paginationService.paginate(filteredEvents, query.eventPage(), query.eventSize());
+        PageResponse<AuditEventItem> eventPageResponse = PageResponse.of(
+                eventPageRows.getContent().stream().map(eventMapper::map).toList(),
+                query.eventPage(),
+                query.eventSize(),
+                eventPageRows.getTotalElements()
+        );
 
         return AuditDashboardResponse.builder()
-                .summary(summaryAssembler.assemble(filteredConfigChanges, filteredEvents))
+                .summary(buildSummary(
+                        query,
+                        normalizedEventCategory,
+                        normalizedEventKeyword,
+                        configPageRows.getTotalElements()
+                ))
                 .configChanges(configPageResponse)
                 .events(eventPageResponse)
                 .build();
+    }
+
+    private com.java.controller.dto.AuditSummaryResponse buildSummary(
+            AuditQuery query,
+            String selectedCategory,
+            String eventKeyword,
+            long configCount
+    ) {
+        long alerts = countCategory(query, selectedCategory, eventKeyword, "alerts");
+        long device = countCategory(query, selectedCategory, eventKeyword, "device");
+        long system = countCategory(query, selectedCategory, eventKeyword, "system");
+        long total = alerts + device + system;
+
+        return com.java.controller.dto.AuditSummaryResponse.builder()
+                .alerts(alerts)
+                .device(device)
+                .system(system)
+                .totalEvents(total)
+                .configChanges(configCount)
+                .build();
+    }
+
+    private long countCategory(AuditQuery query, String selectedCategory, String eventKeyword, String category) {
+        if (!"all".equals(selectedCategory) && !selectedCategory.equals(category)) {
+            return 0L;
+        }
+
+        return activityLogRepository.countAuditEvents(
+                query.homeId(),
+                query.from(),
+                query.to(),
+                category,
+                eventKeyword
+        );
+    }
+
+    private String normalizeKeyword(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private String normalizeCategory(String value) {
+        if (value == null || value.isBlank()) {
+            return "all";
+        }
+        return value.trim().toLowerCase();
     }
 }

@@ -16,7 +16,7 @@ try:
 except:
     # IMPORTANT: 127.0.0.1 is the YoloBit itself, not the computer.
     # Put a real LAN IP in aiot_local_config.py.
-    GATEWAY_HOST='192.168.1.114';GATEWAY_PORT=9000;HOME_ID=1;DEVICE_TOKEN='ohstem-demo-token';CFG_WIFI_SSID='Test';CFG_WIFI_PASS='12345678'
+    GATEWAY_HOST='10.11.2.102';GATEWAY_PORT=9000;HOME_ID=1;DEVICE_TOKEN='ohstem-demo-token';CFG_WIFI_SSID='Test';CFG_WIFI_PASS='12345678'
 
 HOST,PORT,HOME=GATEWAY_HOST,GATEWAY_PORT,HOME_ID
 BASE='http://%s:%s'%(HOST,PORT)

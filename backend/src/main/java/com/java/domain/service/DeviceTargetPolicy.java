@@ -68,6 +68,11 @@ public class DeviceTargetPolicy {
 
         DeviceTarget resolvedTarget = targetResolver.resolve(target);
         String subtype = subtypeResolver.normalize(device.getSubtype());
+        if (isSensorOnlyDevice(device, subtype) && isControlTarget(resolvedTarget)) {
+            throw new BadRequestException(
+                    "Device " + device.getId() + " is a sensor-only device and cannot be controlled"
+            );
+        }
 
         Set<DeviceTarget> supportedTargets = supportPolicies.stream()
                 .filter(policy -> policy.supports(subtype))
@@ -123,6 +128,19 @@ public class DeviceTargetPolicy {
                 .map(DeviceTargetSupportPolicy::supportedTargets)
                 .map(targets -> targets.contains(target))
                 .orElse(false);
+    }
+
+    private boolean isSensorOnlyDevice(DeviceEntity device, String subtype) {
+        return device.getDeviceClass() == com.java.domain.DeviceClass.SENSOR_NODE
+                || subtype.endsWith("_NODE")
+                || subtype.endsWith("_SENSOR");
+    }
+
+    private boolean isControlTarget(DeviceTarget target) {
+        return target == DeviceTarget.POWER
+                || target == DeviceTarget.SPEED
+                || target == DeviceTarget.BRIGHTNESS
+                || target == DeviceTarget.MODE;
     }
 
     private void requireText(String value, String message) {

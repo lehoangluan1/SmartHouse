@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { subscribeDashboardEvents } from "../api/dashboardEvents";
+import { subscribeDashboardEvents } from "../../../api/dashboardRealtime";
 
 export function useDashboardSse(homeId, { onEvent } = {}) {
   const [connectionState, setConnectionState] = useState(

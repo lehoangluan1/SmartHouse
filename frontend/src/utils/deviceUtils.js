@@ -67,6 +67,17 @@ export function getDeviceClass(device) {
     .toUpperCase();
 }
 
+export function isControllableDevice(device) {
+  const deviceClass = getDeviceClass(device);
+  const type = getDeviceType(device);
+
+  if (deviceClass && deviceClass !== "ACTUATOR") {
+    return false;
+  }
+
+  return type === "FAN" || type === "LIGHT";
+}
+
 export function isControllerDevice(device) {
   const deviceClass = getDeviceClass(device);
   const subtype = getDeviceType(device);
@@ -90,15 +101,30 @@ export function findConfiguredDevice(devices, candidateIds, expectedType) {
     devices.find((device) => {
       const deviceId = toDeviceId(device?.id);
       const deviceType = getDeviceType(device);
-      return normalizedIds.includes(deviceId) && deviceType === expectedType;
+      return (
+        normalizedIds.includes(deviceId) &&
+        deviceType === expectedType &&
+        isControllableDevice(device)
+      );
     }) || null
+  );
+}
+
+export function findFirstControllableDevice(devices, expectedType) {
+  return (
+    devices.find(
+      (device) =>
+        getDeviceType(device) === expectedType && isControllableDevice(device)
+    ) || null
   );
 }
 
 export function buildConfiguredDashboardDevices(devices, slots) {
   const configured = [
-    findConfiguredDevice(devices, [slots?.fanDeviceId], "FAN"),
-    findConfiguredDevice(devices, [slots?.lightDeviceId], "LIGHT"),
+    findConfiguredDevice(devices, [slots?.fanDeviceId], "FAN") ||
+      findFirstControllableDevice(devices, "FAN"),
+    findConfiguredDevice(devices, [slots?.lightDeviceId], "LIGHT") ||
+      findFirstControllableDevice(devices, "LIGHT"),
   ].filter(Boolean);
 
   const uniqueMap = new Map();

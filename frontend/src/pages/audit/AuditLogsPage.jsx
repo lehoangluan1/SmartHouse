@@ -33,6 +33,17 @@ const DEFAULT_PAGE = {
   last: true,
 };
 
+function useDebouncedValue(value, delayMs = 300) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => clearTimeout(timeoutId);
+  }, [value, delayMs]);
+
+  return debouncedValue;
+}
+
 function normalizeBooleanLike(value) {
   if (value === true || value === "true") return "ON";
   if (value === false || value === "false") return "OFF";
@@ -197,22 +208,24 @@ function AuditLogsPage() {
   const [eventPage, setEventPage] = useState(0);
 
   const range = useMemo(() => buildDefaultRange(), []);
+  const debouncedConfigKeyword = useDebouncedValue(configKeyword);
+  const debouncedEventKeyword = useDebouncedValue(eventKeyword);
 
   useEffect(() => {
     setConfigPage(0);
-  }, [configKeyword]);
+  }, [debouncedConfigKeyword]);
 
   useEffect(() => {
     setEventPage(0);
-  }, [eventKeyword, activeTab]);
+  }, [debouncedEventKeyword, activeTab]);
 
   useEffect(() => {
     loadConfigChanges();
-  }, [homeId, configPage, configKeyword, range.from, range.to]);
+  }, [homeId, configPage, debouncedConfigKeyword, range.from, range.to]);
 
   useEffect(() => {
     loadEventsAndSummary();
-  }, [homeId, eventPage, eventKeyword, activeTab, range.from, range.to]);
+  }, [homeId, eventPage, debouncedEventKeyword, activeTab, range.from, range.to]);
 
   async function loadConfigChanges() {
     try {
@@ -225,13 +238,12 @@ function AuditLogsPage() {
         to: range.to,
         configPage,
         configSize: 10,
-        configKeyword,
+        configKeyword: debouncedConfigKeyword,
         eventPage: 0,
         eventSize: 1,
         eventKeyword: "",
         eventCategory: "all",
       });
-      console.log(res);
       setConfigPageData(
         toServerPageData(res?.configChanges, normalizeConfigChange, 10)
       );
@@ -256,7 +268,7 @@ function AuditLogsPage() {
         configKeyword: "",
         eventPage,
         eventSize: 20,
-        eventKeyword,
+        eventKeyword: debouncedEventKeyword,
         eventCategory: activeTab,
       });
 

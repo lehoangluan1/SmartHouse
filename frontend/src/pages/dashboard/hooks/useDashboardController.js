@@ -24,6 +24,13 @@ import {
 } from "../../../utils/dashboardStateUtils";
 
 const DEFAULT_CONNECTION_STATE = "disconnected";
+const isDev = import.meta.env.DEV;
+
+function devRealtimeLog(...args) {
+  if (isDev) {
+    console.debug("[dashboard]", ...args);
+  }
+}
 
 export function useDashboardController({ homeId, currentUser }) {
   const [dashboardData, setDashboardData] = useState(null);
@@ -193,7 +200,7 @@ export function useDashboardController({ homeId, currentUser }) {
   }, [loadDashboard]);
 
   const handleRealtimeEvent = useCallback((event, eventType) => {
-    console.log("HANDLE REALTIME:", eventType, event);
+    devRealtimeLog("realtime event received", eventType, event);
     if (!event || typeof event !== "object") return;
 
     setLastRealtimeEventType(eventType || event?.type || null);
@@ -221,11 +228,16 @@ export function useDashboardController({ homeId, currentUser }) {
     const cleanup = subscribeDashboardEvents(homeId, {
       onOpen: () => {
         if (!mountedRef.current) return;
+        devRealtimeLog("realtime connected", { homeId });
         setConnectionState("connected");
         stopPolling();
       },
-      onError: () => {
+      onError: (streamError, meta) => {
         if (!mountedRef.current) return;
+        devRealtimeLog("realtime error", { homeId, meta, streamError });
+        setError((prev) =>
+          prev || "Realtime stream disconnected. Retrying in the background."
+        );
       },
       onStateChange: (state) => {
         if (!mountedRef.current) return;
@@ -233,6 +245,11 @@ export function useDashboardController({ homeId, currentUser }) {
         setConnectionState(state);
 
         if (state === "connected") {
+          setError((prev) =>
+            prev === "Realtime stream disconnected. Retrying in the background."
+              ? ""
+              : prev
+          );
           stopPolling();
           return;
         }
