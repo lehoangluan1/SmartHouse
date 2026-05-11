@@ -71,6 +71,8 @@ COMMAND_CACHE_TTL = float(os.getenv("COMMAND_CACHE_TTL", "8.0"))
 COMMAND_ROUTE_SYNC_FALLBACK = os.getenv("COMMAND_ROUTE_SYNC_FALLBACK", "false").lower() == "true"
 COMMAND_ROUTE_MAX_WAIT = float(os.getenv("COMMAND_ROUTE_MAX_WAIT", "0.15"))
 COMMAND_LONG_POLL_WAIT_MS = int(os.getenv("COMMAND_LONG_POLL_WAIT_MS", "1500"))
+COMMAND_PREFETCH_WAIT_MS = int(os.getenv("COMMAND_PREFETCH_WAIT_MS", "0"))
+COMMAND_PREFETCH_TIMEOUT = float(os.getenv("COMMAND_PREFETCH_TIMEOUT", "0.45"))
 COMMAND_LONG_POLL_TIMEOUT = max(COMMAND_TIMEOUT, (COMMAND_LONG_POLL_WAIT_MS / 1000.0) + 0.4)
 BACKEND_BATCH_COMMANDS = os.getenv("BACKEND_BATCH_COMMANDS", "true").lower() == "true"
 
@@ -84,6 +86,10 @@ COMMAND_INFLIGHT = set()
 COMMAND_LAST_FETCH = {}
 COMMAND_MIN_INTERVAL_PER_KEY = float(os.getenv("COMMAND_MIN_INTERVAL_PER_KEY", "1.0"))
 COMMAND_LOCK = threading.RLock()
+COMMAND_DELIVERED_TTL = float(os.getenv("COMMAND_DELIVERED_TTL", "60.0"))
+COMMAND_DELIVERED = {}
+COMMAND_ACKED_LOCAL = {}
+COMMAND_ACKED_UPSTREAM = {}
 
 # Local instant command queue.
 # Automation can POST directly to gateway; YoloBit receives it on next /gw/commands/next poll.
@@ -98,6 +104,8 @@ TELEMETRY_WORKER_STARTED = False
 TELEMETRY_LOCK = threading.RLock()
 
 ACK_QUEUE_MAX = int(os.getenv("ACK_QUEUE_MAX", "200"))
+ACK_RETRY_DELAY = float(os.getenv("ACK_RETRY_DELAY", "0.4"))
+ACK_MAX_ATTEMPTS = int(os.getenv("ACK_MAX_ATTEMPTS", "8"))
 ACK_Q = deque()
 ACK_LOCK = threading.RLock()
 ACK_WORKER_STARTED = False
@@ -923,12 +931,59 @@ def command_id_of(cmd):
     return None
 
 
+def command_record_key(device_key, command_id):
+    return "%s:%s" % (device_key, command_id)
+
+
+def prune_command_records(now=None):
+    if now is None:
+        now = time.time()
+    for table in (COMMAND_DELIVERED, COMMAND_ACKED_LOCAL, COMMAND_ACKED_UPSTREAM):
+        expired = [key for key, ts in table.items() if now - ts > COMMAND_DELIVERED_TTL]
+        for key in expired:
+            table.pop(key, None)
+
+
+def has_recent_command_record(device_key, command_id):
+    if command_id is None:
+        return False
+    key = command_record_key(device_key, command_id)
+    now = time.time()
+    prune_command_records(now)
+    return (
+        key in COMMAND_DELIVERED
+        or key in COMMAND_ACKED_LOCAL
+        or key in COMMAND_ACKED_UPSTREAM
+    )
+
+
+def mark_command_delivered(device_key, cmd):
+    command_id = command_id_of(cmd)
+    if command_id is None:
+        return
+    with COMMAND_LOCK:
+        prune_command_records()
+        COMMAND_DELIVERED[command_record_key(device_key, command_id)] = time.time()
+    logger.info(
+        "COMMAND delivered_to_device key=%s id=%s target=%s value=%s source=%s",
+        device_key,
+        command_id,
+        cmd.get("target") if isinstance(cmd, dict) else None,
+        cmd.get("value") if isinstance(cmd, dict) else None,
+        cmd.get("source") if isinstance(cmd, dict) else None,
+    )
+
+
 def command_cache_put(device_key, cmd):
     cmd = normalize_backend_command(device_key, cmd)
     if cmd is None:
         return
 
     with COMMAND_LOCK:
+        if has_recent_command_record(device_key, cmd.get("id")):
+            logger.info("COMMAND cache suppress already-delivered key=%s id=%s", device_key, cmd.get("id"))
+            return
+
         old = COMMAND_CACHE.get(device_key)
         if isinstance(old, dict) and old.get("id") == cmd.get("id"):
             if DIAG_COMMAND:
@@ -953,8 +1008,8 @@ def fetch_one_command_for_cache(device_key):
     try:
         data = fetch_backend_data(
             f"command-prefetch key={device_key}",
-            f"{BACKEND_BASE}/api/v1/device/{device_key}/commands/next?waitMs={COMMAND_LONG_POLL_WAIT_MS}",
-            timeout=COMMAND_LONG_POLL_TIMEOUT,
+            f"{BACKEND_BASE}/api/v1/device/{device_key}/commands/next?waitMs={COMMAND_PREFETCH_WAIT_MS}",
+            timeout=COMMAND_PREFETCH_TIMEOUT,
         )
         command_cache_put(device_key, data)
     finally:
@@ -967,8 +1022,8 @@ def fetch_batch_commands_for_cache(keys):
         encoded_keys = quote(",".join(keys), safe=",")
         data = fetch_backend_data(
             "command-prefetch-batch keys=%s" % ",".join(keys),
-            f"{BACKEND_BASE}/api/v1/device/commands/next-batch?keys={encoded_keys}&waitMs={COMMAND_LONG_POLL_WAIT_MS}",
-            timeout=COMMAND_LONG_POLL_TIMEOUT,
+            f"{BACKEND_BASE}/api/v1/device/commands/next-batch?keys={encoded_keys}&waitMs={COMMAND_PREFETCH_WAIT_MS}",
+            timeout=COMMAND_PREFETCH_TIMEOUT,
         )
         if isinstance(data, dict):
             for key in keys:
@@ -1036,8 +1091,8 @@ def start_command_prefetch_once():
     logger.info(
         "Command prefetch started interval=%ss waitMs=%s timeout=%ss",
         COMMAND_PREFETCH_INTERVAL,
-        COMMAND_LONG_POLL_WAIT_MS,
-        COMMAND_LONG_POLL_TIMEOUT,
+        COMMAND_PREFETCH_WAIT_MS,
+        COMMAND_PREFETCH_TIMEOUT,
     )
 
 
@@ -1139,16 +1194,26 @@ def enqueue_ack(device_key, command_id):
         logger.info("GATEWAY command ack local key=%s id=%s", device_key, command_id)
         return True
 
+    now = time.time()
+    record_key = command_record_key(device_key, command_id)
+    with COMMAND_LOCK:
+        prune_command_records(now)
+        COMMAND_ACKED_LOCAL[record_key] = now
+        COMMAND_CACHE.pop(device_key, None)
+        COMMAND_CACHE_TS.pop(device_key, None)
+
     with ACK_LOCK:
-        for existing_key, existing_id in ACK_Q:
+        for existing_key, existing_id, _attempt, _not_before in ACK_Q:
             if existing_key == device_key and existing_id == command_id:
+                logger.info("COMMAND ack_received_from_device duplicate_queued key=%s id=%s", device_key, command_id)
                 return True
 
         if len(ACK_Q) >= ACK_QUEUE_MAX:
             dropped = ACK_Q.popleft()
             logger.warning("ACK queue full; dropped oldest key=%s id=%s", dropped[0], dropped[1])
 
-        ACK_Q.append((device_key, command_id))
+        ACK_Q.append((device_key, command_id, 1, now))
+        logger.info("COMMAND ack_received_from_device key=%s id=%s queued=True", device_key, command_id)
         return True
 
 
@@ -1162,7 +1227,14 @@ def ack_worker_loop():
                 time.sleep(0.02)
                 continue
 
-            device_key, command_id = item
+            device_key, command_id, attempt, not_before = item
+            now = time.time()
+            if not_before > now:
+                with ACK_LOCK:
+                    ACK_Q.append(item)
+                time.sleep(min(0.05, max(0.01, not_before - now)))
+                continue
+
             try:
                 resp = proxy_post(
                     f"{BACKEND_BASE}/api/v1/device/{device_key}/commands/ack",
@@ -1170,15 +1242,50 @@ def ack_worker_loop():
                     timeout=ACK_TIMEOUT,
                 )
                 if 200 <= resp.status_code < 300:
-                    logger.info("ASYNC command ack forwarded key=%s id=%s status=%s", device_key, command_id, resp.status_code)
+                    with COMMAND_LOCK:
+                        COMMAND_ACKED_UPSTREAM[command_record_key(device_key, command_id)] = time.time()
+                    logger.info(
+                        "COMMAND ack_forwarded_upstream key=%s id=%s status=%s attempt=%s",
+                        device_key,
+                        command_id,
+                        resp.status_code,
+                        attempt,
+                    )
                 else:
-                    logger.warning("ASYNC command ack upstream failed key=%s id=%s status=%s", device_key, command_id, resp.status_code)
+                    retry_ack(device_key, command_id, attempt, "status_%s" % resp.status_code)
             except requests.RequestException as exc:
-                logger.warning("ASYNC command ack failed key=%s id=%s err=%s", device_key, command_id, type(exc).__name__)
+                retry_ack(device_key, command_id, attempt, type(exc).__name__)
 
         except Exception as exc:
             logger.warning("ACK worker loop err=%s", type(exc).__name__)
             time.sleep(0.1)
+
+
+def retry_ack(device_key, command_id, attempt, reason):
+    if attempt >= ACK_MAX_ATTEMPTS:
+        logger.warning(
+            "COMMAND ack_forward_give_up key=%s id=%s attempts=%s reason=%s",
+            device_key,
+            command_id,
+            attempt,
+            reason,
+        )
+        return
+
+    delay = min(ACK_RETRY_DELAY * (2 ** max(0, attempt - 1)), 5.0)
+    next_attempt = attempt + 1
+    not_before = time.time() + delay
+    with ACK_LOCK:
+        ACK_Q.append((device_key, command_id, next_attempt, not_before))
+    logger.warning(
+        "COMMAND ack_forward_failed_retry_scheduled key=%s id=%s attempt=%s nextAttempt=%s delay=%.2fs reason=%s",
+        device_key,
+        command_id,
+        attempt,
+        next_attempt,
+        delay,
+        reason,
+    )
 
 
 def start_ack_worker_once():
@@ -1258,6 +1365,7 @@ def get_next_command(device_key):
         )
 
     if isinstance(data, dict):
+        mark_command_delivered(device_key, data)
         logger.info(
             "COMMAND received/route key=%s id=%s target=%s value=%s source=%s",
             device_key,
@@ -1314,6 +1422,7 @@ def get_next_commands():
 
     for device_key, data in out.items():
         if isinstance(data, dict):
+            mark_command_delivered(device_key, data)
             logger.info(
                 "COMMAND received/route key=%s id=%s target=%s value=%s source=%s",
                 device_key,
@@ -1444,16 +1553,20 @@ if __name__ == "__main__":
         YOLO_BASE,
     )
     logger.info(
-        "DIAG config diag_http_body=%s body_limit=%s diag_command=%s command_timeout=%s command_wait_ms=%s command_cache_ttl=%s route_sync_fallback=%s backend_batch=%s ack_queue_max=%s",
+        "DIAG config diag_http_body=%s body_limit=%s diag_command=%s command_timeout=%s command_wait_ms=%s command_prefetch_wait_ms=%s command_prefetch_timeout=%s command_cache_ttl=%s route_sync_fallback=%s backend_batch=%s ack_queue_max=%s ack_retry_delay=%s ack_max_attempts=%s",
         DIAG_HTTP_BODY,
         DIAG_HTTP_BODY_LIMIT,
         DIAG_COMMAND,
         COMMAND_TIMEOUT,
         COMMAND_LONG_POLL_WAIT_MS,
+        COMMAND_PREFETCH_WAIT_MS,
+        COMMAND_PREFETCH_TIMEOUT,
         COMMAND_CACHE_TTL,
         COMMAND_ROUTE_SYNC_FALLBACK,
         BACKEND_BATCH_COMMANDS,
         ACK_QUEUE_MAX,
+        ACK_RETRY_DELAY,
+        ACK_MAX_ATTEMPTS,
     )
     start_telemetry_worker_once()
     start_ack_worker_once()
