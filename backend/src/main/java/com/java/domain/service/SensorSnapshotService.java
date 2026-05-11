@@ -39,4 +39,26 @@ public class SensorSnapshotService {
 
         return latest.getValueNumeric();
     }
+
+    public Double latestNumericValueForDevice(Long deviceId, String sensorKind) {
+        if (deviceId == null || sensorKind == null || sensorKind.isBlank()) {
+            return null;
+        }
+
+        SensorEntity sensor = sensorRepository.findByDeviceIdAndSensorKind(
+                deviceId,
+                sensorKind.trim().toUpperCase()
+        ).orElse(null);
+
+        if (sensor == null || sensor.getId() == null) {
+            return null;
+        }
+
+        SensorDataEntity latest = sensorDataRepository.findFirstBySensor_IdOrderByCreatedAtDesc(sensor.getId()).orElse(null);
+        if (latest == null) {
+            return null;
+        }
+
+        return latest.getValueNumeric();
+    }
 }

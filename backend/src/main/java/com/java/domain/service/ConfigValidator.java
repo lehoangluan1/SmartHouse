@@ -105,7 +105,10 @@ public class ConfigValidator {
             }
         }
 
+        validateSlotType(slots.temperatureDeviceId(), "SENSOR_NODE", "TEMPERATURE_NODE", "Temperature sensor");
+        validateSlotType(slots.humidityDeviceId(), "SENSOR_NODE", "HUMIDITY_NODE", "Humidity sensor");
         validateSlotType(slots.lightSensorDeviceId(), "SENSOR_NODE", "LIGHT_NODE", "Light sensor");
+        validateSlotType(slots.motionDeviceId(), "SENSOR_NODE", "MOTION_NODE", "Motion sensor");
         validateSlotType(slots.fanDeviceId(), "ACTUATOR", "FAN", "Fan actuator");
         validateSlotType(slots.lightDeviceId(), "ACTUATOR", "LIGHT", "Light actuator");
     }
@@ -127,7 +130,19 @@ public class ConfigValidator {
 
         if (!expectedClass.equalsIgnoreCase(actualClass) || !expectedSubtype.equalsIgnoreCase(actualSubtype)) {
             throw new BadRequestException(label + " must be " + expectedClass + "/" + expectedSubtype
-                    + ": " + deviceId);
+                    + "; selected " + describeDevice(device)
+                    + " is " + blankToUnknown(actualClass) + "/" + blankToUnknown(actualSubtype));
         }
+    }
+
+    private String describeDevice(DeviceEntity device) {
+        String key = device.getDeviceKey() == null || device.getDeviceKey().isBlank()
+                ? "deviceId=" + device.getId()
+                : device.getDeviceKey();
+        return key + " (id=" + device.getId() + ")";
+    }
+
+    private String blankToUnknown(String value) {
+        return value == null || value.isBlank() ? "UNKNOWN" : value;
     }
 }

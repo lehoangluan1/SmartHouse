@@ -17,6 +17,7 @@ public class DeviceResponse {
     private Long id;
     private String name;
     private String deviceKey;
+    private String deviceClass;
     private String type;
     private String subtype;
     private String status;

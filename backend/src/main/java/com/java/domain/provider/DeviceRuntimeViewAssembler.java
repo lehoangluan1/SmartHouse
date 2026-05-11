@@ -29,6 +29,7 @@ public class DeviceRuntimeViewAssembler {
                 .id(device.getId())
                 .name(device.getName())
                 .deviceKey(device.getDeviceKey())
+                .deviceClass(device.getDeviceClass() != null ? device.getDeviceClass().name() : null)
                 .type(metadataResolver.resolveDeviceType(device))
                 .subtype(device.getSubtype())
                 .status(device.getStatus() != null ? device.getStatus().name() : null)

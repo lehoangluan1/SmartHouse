@@ -10,7 +10,17 @@ function getDeviceType(device) {
 }
 
 function getDeviceClass(device) {
-  return String(device?.deviceClass || device?.class || "").toUpperCase();
+  const explicitClass = String(device?.deviceClass || device?.class || "").toUpperCase();
+  if (explicitClass) return explicitClass;
+
+  const type = getDeviceType(device);
+  if (["TEMPERATURE_NODE", "HUMIDITY_NODE", "LIGHT_NODE", "MOTION_NODE"].includes(type)) {
+    return "SENSOR_NODE";
+  }
+  if (["FAN", "LIGHT", "AIR_CONDITIONER"].includes(type)) {
+    return "ACTUATOR";
+  }
+  return "";
 }
 
 function matchesDevice(device, expectedClass, expectedType) {
@@ -22,8 +32,13 @@ function matchesDevice(device, expectedClass, expectedType) {
 
 function getDeviceLabel(device) {
   const name = device?.name || `Device #${device?.id ?? ""}`;
-  const room = device?.roomName?.trim();
-  return room ? `${name} • ${room}` : name;
+  const key = device?.deviceKey ? ` (${device.deviceKey})` : "";
+  const meta = [getDeviceClass(device), getDeviceType(device)].filter(Boolean).join("/");
+  return meta ? `${name}${key} - ${meta}` : `${name}${key}`;
+}
+
+function findDevice(devices, deviceId) {
+  return (devices || []).find((device) => Number(device.id) === Number(deviceId));
 }
 
 function MonitoringDeviceSelector({
@@ -78,7 +93,10 @@ function MonitoringDeviceSelector({
         label="Temperature Sensor"
         subtitle="Sensor used for Temperature card in Monitoring"
         options={temperatureDevices}
+        devices={devices}
         value={value?.temperatureDeviceId}
+        expectedClass="SENSOR_NODE"
+        expectedType="TEMPERATURE_NODE"
         disabled={disabled}
         onChange={(deviceId) =>
           onChange?.("temperatureDeviceId", deviceId ? Number(deviceId) : null)
@@ -90,7 +108,10 @@ function MonitoringDeviceSelector({
         label="Humidity Sensor"
         subtitle="Sensor used for Humidity card in Monitoring"
         options={humidityDevices}
+        devices={devices}
         value={value?.humidityDeviceId}
+        expectedClass="SENSOR_NODE"
+        expectedType="HUMIDITY_NODE"
         disabled={disabled}
         onChange={(deviceId) =>
           onChange?.("humidityDeviceId", deviceId ? Number(deviceId) : null)
@@ -102,7 +123,10 @@ function MonitoringDeviceSelector({
         label="Light Sensor"
         subtitle="Sensor used for ambient light monitoring"
         options={lightSensorDevices}
+        devices={devices}
         value={value?.lightSensorDeviceId}
+        expectedClass="SENSOR_NODE"
+        expectedType="LIGHT_NODE"
         disabled={disabled}
         onChange={(deviceId) =>
           onChange?.("lightSensorDeviceId", deviceId ? Number(deviceId) : null)
@@ -114,7 +138,10 @@ function MonitoringDeviceSelector({
         label="Motion Sensor"
         subtitle="Sensor used for Motion card in Monitoring"
         options={motionDevices}
+        devices={devices}
         value={value?.motionDeviceId}
+        expectedClass="SENSOR_NODE"
+        expectedType="MOTION_NODE"
         disabled={disabled}
         onChange={(deviceId) =>
           onChange?.("motionDeviceId", deviceId ? Number(deviceId) : null)
@@ -126,7 +153,10 @@ function MonitoringDeviceSelector({
         label="Fan Device"
         subtitle="Actuator used for fan automation control"
         options={fanDevices}
+        devices={devices}
         value={value?.fanDeviceId}
+        expectedClass="ACTUATOR"
+        expectedType="FAN"
         disabled={disabled}
         onChange={(deviceId) =>
           onChange?.("fanDeviceId", deviceId ? Number(deviceId) : null)
@@ -138,7 +168,10 @@ function MonitoringDeviceSelector({
         label="Light Device"
         subtitle="Actuator used for light automation control"
         options={lightDevices}
+        devices={devices}
         value={value?.lightDeviceId}
+        expectedClass="ACTUATOR"
+        expectedType="LIGHT"
         disabled={disabled}
         onChange={(deviceId) =>
           onChange?.("lightDeviceId", deviceId ? Number(deviceId) : null)
@@ -169,10 +202,18 @@ function SelectorRow({
   label,
   subtitle,
   options = [],
+  devices = [],
   value,
+  expectedClass,
+  expectedType,
   disabled = false,
   onChange,
 }) {
+  const selectedDevice = findDevice(devices, value);
+  const selectedInOptions = options.some((device) => Number(device.id) === Number(value));
+  const selectedInvalid = value != null && value !== "" && selectedDevice && !selectedInOptions;
+  const selectedMissing = value != null && value !== "" && !selectedDevice;
+
   return (
     <div className="config-device-row">
       <div className="config-device-row__left">
@@ -194,6 +235,16 @@ function SelectorRow({
           onChange={(event) => onChange?.(event.target.value)}
         >
           <option value="">-- Select device --</option>
+          {selectedInvalid ? (
+            <option value={value}>
+              Invalid for this slot: {getDeviceLabel(selectedDevice)}
+            </option>
+          ) : null}
+          {selectedMissing ? (
+            <option value={value}>
+              Missing device #{value} - expected {expectedClass}/{expectedType}
+            </option>
+          ) : null}
           {options.map((device) => (
             <option key={device.id} value={device.id}>
               {getDeviceLabel(device)}

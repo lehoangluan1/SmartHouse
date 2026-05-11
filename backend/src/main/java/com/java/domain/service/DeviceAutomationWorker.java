@@ -71,6 +71,11 @@ public class DeviceAutomationWorker {
 
     @Transactional
     public void evaluateAndApplyOneDevice(Long deviceId) {
+        evaluateAndApplyOneDevice(deviceId, "scheduler");
+    }
+
+    @Transactional
+    public void evaluateAndApplyOneDevice(Long deviceId, String reason) {
         DeviceEntity device = deviceRepository.findById(deviceId)
                 .orElseThrow(() -> new NotFoundException("Device not found: " + deviceId));
 
@@ -93,29 +98,30 @@ public class DeviceAutomationWorker {
             return;
         }
 
+        log.info("AUTOMATION evaluate home={} mode={} reason={} deviceId={}",
+                homeId, mode.name(), safeReason(reason), device.getId());
+
         if (manualHoldQueryService.isHolding(device.getId())) {
             log.debug("Skipping automation for device {} because a manual hold is active", device.getId());
             return;
         }
 
-        ConfigEntity config = configRepository.findFirstByHomeIdOrderByUpdatedAtDesc(homeId).orElse(null);
+        ConfigEntity config = resolveActiveConfig(homeId);
         if (config == null) {
             return;
         }
+        log.info("AUTOMATION config_reload configId={} home={}", config.getId(), homeId);
+
+        Double temperature = readTemperatureSnapshot(homeId, config);
+        Double light = readLightSnapshot(homeId, config);
 
         List<AutomationDecision> decisions = isFan(device)
-                ? fanAutomationPolicy.decide(
-                        stateMap,
-                        config,
-                        sensorSnapshotService.latestNumericValue(homeId, TEMPERATURE_SENSOR),
-                        mode
-                )
-                : lightAutomationPolicy.decide(
-                        stateMap,
-                        config,
-                        sensorSnapshotService.latestNumericValue(homeId, LIGHT_SENSOR),
-                        mode
-                );
+                ? fanAutomationPolicy.decide(stateMap, config, temperature, mode)
+                : lightAutomationPolicy.decide(stateMap, config, light, mode);
+
+        if (mode == SystemMode.manual) {
+            log.info("AUTOMATION skip reason=manual_mode home={} deviceId={}", homeId, device.getId());
+        }
 
         Integer kMinutes = config.getKMinutes();
 
@@ -125,17 +131,20 @@ public class DeviceAutomationWorker {
             Object lock = targetLocks.computeIfAbsent(lockKey, k -> new Object());
 
             synchronized (lock) {
-                boolean coolingDown = automationCooldownService.isCoolingDown(
-                        device.getId(),
-                        normalizedTarget,
-                        decision.value(),
-                        kMinutes
-                );
+                boolean immediate = isImmediateThresholdDecision(decision.reason());
+                // Basic threshold reactions are intentionally immediate; K cooldown is kept for delayed/reconciliation rules.
+                boolean coolingDown = !immediate && automationCooldownService.isCoolingDown(
+                                device.getId(),
+                                normalizedTarget,
+                                decision.value(),
+                                kMinutes
+                        );
 
                 log.info(
                         "AUTO_DECISION deviceId={}, subtype={}, target={}, value={}, reason={}, coolingDown={}",
                         device.getId(), device.getSubtype(), normalizedTarget, decision.value(), decision.reason(), coolingDown
                 );
+                logThresholdDecision(device, decision, temperature, light, config);
 
                 if (coolingDown) {
                     continue;
@@ -152,6 +161,80 @@ public class DeviceAutomationWorker {
                         device.getId(), normalizedTarget, decision.value(), executed);
             }
         }
+    }
+
+    private ConfigEntity resolveActiveConfig(Long homeId) {
+        return configRepository.findFirstByHomeIdAndIsActiveTrue(homeId)
+                .or(() -> configRepository.findFirstByHomeIdOrderByUpdatedAtDesc(homeId))
+                .orElse(null);
+    }
+
+    private Double readTemperatureSnapshot(Long homeId, ConfigEntity config) {
+        if (config != null
+                && config.getMonitoringTemperatureDevice() != null
+                && config.getMonitoringTemperatureDevice().getId() != null) {
+            Double value = sensorSnapshotService.latestNumericValueForDevice(
+                    config.getMonitoringTemperatureDevice().getId(),
+                    TEMPERATURE_SENSOR
+            );
+            if (value != null) {
+                return value;
+            }
+        }
+        return sensorSnapshotService.latestNumericValue(homeId, TEMPERATURE_SENSOR);
+    }
+
+    private Double readLightSnapshot(Long homeId, ConfigEntity config) {
+        if (config != null
+                && config.getMonitoringLightSensorDevice() != null
+                && config.getMonitoringLightSensorDevice().getId() != null) {
+            Double value = sensorSnapshotService.latestNumericValueForDevice(
+                    config.getMonitoringLightSensorDevice().getId(),
+                    LIGHT_SENSOR
+            );
+            if (value != null) {
+                return value;
+            }
+        }
+        return sensorSnapshotService.latestNumericValue(homeId, LIGHT_SENSOR);
+    }
+
+    private void logThresholdDecision(DeviceEntity device, AutomationDecision decision, Double temperature, Double light, ConfigEntity config) {
+        if (isFan(device)) {
+            if ("AUTO_TEMP_HIGH".equalsIgnoreCase(decision.reason())) {
+                log.info("AUTOMATION temp value={} T_high={} action=fan_on", temperature, config.getThigh());
+            } else if ("AUTO_TEMP_LOW".equalsIgnoreCase(decision.reason())) {
+                log.info("AUTOMATION temp value={} T_low={} action=fan_off", temperature, config.getTlow());
+            }
+        } else if (isLight(device)) {
+            if ("AUTO_LIGHT_LOW".equalsIgnoreCase(decision.reason())) {
+                log.info("AUTOMATION light value={} L_low={} action=light_on", light, config.getLlow());
+            } else if ("AUTO_LIGHT_HIGH".equalsIgnoreCase(decision.reason())) {
+                log.info("AUTOMATION light value={} L_high={} action=light_off", light, config.getLhigh());
+            }
+        }
+    }
+
+    private boolean isImmediateThresholdDecision(String reason) {
+        if (reason == null) {
+            return false;
+        }
+        return switch (reason.trim().toUpperCase(Locale.ROOT)) {
+            case "AUTO_TEMP_HIGH",
+                    "AUTO_TEMP_LOW",
+                    "SLEEP_TEMP_HIGH",
+                    "SLEEP_TEMP_LOW",
+                    "AWAY_TEMP_HIGH",
+                    "AWAY_TEMP_NORMAL",
+                    "AUTO_LIGHT_LOW",
+                    "AUTO_LIGHT_HIGH",
+                    "LIGHT_MODE_FORCE_OFF" -> true;
+            default -> false;
+        };
+    }
+
+    private String safeReason(String reason) {
+        return reason == null || reason.isBlank() ? "scheduler" : reason;
     }
 
     private String normalizeTargetSafe(String target) {

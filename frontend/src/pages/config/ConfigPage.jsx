@@ -158,7 +158,7 @@ function ConfigPage() {
 
   const canSave = !loading && !saving && isDirty;
 
-  async function loadPage() {
+  async function loadPage(preferredConfigId = null) {
     if (!homeId) {
       setConfigs([]);
       setDevices([]);
@@ -181,6 +181,9 @@ function ConfigPage() {
       setDevices(deviceList || []);
 
       const initialConfig =
+        (preferredConfigId
+          ? (configList || []).find((item) => Number(item.id) === Number(preferredConfigId))
+          : null) ||
         (configList || []).find((item) => item.active) ||
         configList?.[0] ||
         null;
@@ -238,6 +241,7 @@ function ConfigPage() {
 
   function handleThresholdChange(field, value) {
     if (saving) return;
+    setError("");
 
     setFormValues((prev) => ({
       ...prev,
@@ -250,6 +254,7 @@ function ConfigPage() {
 
   function handleSlotChange(field, value) {
     if (saving) return;
+    setError("");
 
     setFormValues((prev) => ({
       ...prev,
@@ -262,6 +267,7 @@ function ConfigPage() {
 
   function handleNameChange(value) {
     if (saving) return;
+    setError("");
 
     setFormValues((prev) => ({
       ...prev,
@@ -315,11 +321,7 @@ function ConfigPage() {
         ? await updateConfig(homeId, selectedConfig.id, payload, userId)
         : await createConfig(homeId, payload, userId);
 
-      await loadPage();
-
-      if (saved?.id) {
-        setSelectedConfigId(saved.id);
-      }
+      await loadPage(saved?.id);
     } catch (err) {
       setError(err?.message || "Failed to save config");
     } finally {
@@ -480,7 +482,17 @@ function getDeviceType(device) {
 }
 
 function getDeviceClass(device) {
-  return String(device?.deviceClass || device?.class || "").toUpperCase();
+  const explicitClass = String(device?.deviceClass || device?.class || "").toUpperCase();
+  if (explicitClass) return explicitClass;
+
+  const type = getDeviceType(device);
+  if (["TEMPERATURE_NODE", "HUMIDITY_NODE", "LIGHT_NODE", "MOTION_NODE"].includes(type)) {
+    return "SENSOR_NODE";
+  }
+  if (["FAN", "LIGHT", "AIR_CONDITIONER"].includes(type)) {
+    return "ACTUATOR";
+  }
+  return "";
 }
 
 function findDevice(devices, deviceId) {
@@ -494,12 +506,14 @@ function validateSlotDevice(devices, deviceId, expectedClass, expectedType, labe
 
   const device = findDevice(devices, deviceId);
   if (!device) {
-    setError(`${label} is not available in this home`);
+    setError(`${label} is not available in this home: deviceId=${deviceId}`);
     return false;
   }
 
   if (getDeviceClass(device) !== expectedClass || getDeviceType(device) !== expectedType) {
-    setError(`${label} must use ${expectedType.replace("_", " ").toLowerCase()}`);
+    const deviceKey = device.deviceKey || `deviceId=${device.id}`;
+    const actual = `${getDeviceClass(device) || "UNKNOWN"}/${getDeviceType(device) || "UNKNOWN"}`;
+    setError(`${label} must use ${expectedClass}/${expectedType}; selected ${deviceKey} is ${actual}`);
     return false;
   }
 
@@ -537,43 +551,19 @@ function validateConfig(values, devices, setError) {
     return false;
   }
 
-  if (
-    !validateSlotDevice(
-      devices,
-      slots.lightSensorDeviceId,
-      "SENSOR_NODE",
-      "LIGHT_NODE",
-      "Light sensor",
-      setError
-    )
-  ) {
-    return false;
-  }
+  const slotRules = [
+    ["temperatureDeviceId", "SENSOR_NODE", "TEMPERATURE_NODE", "Temperature sensor"],
+    ["humidityDeviceId", "SENSOR_NODE", "HUMIDITY_NODE", "Humidity sensor"],
+    ["lightSensorDeviceId", "SENSOR_NODE", "LIGHT_NODE", "Light sensor"],
+    ["motionDeviceId", "SENSOR_NODE", "MOTION_NODE", "Motion sensor"],
+    ["fanDeviceId", "ACTUATOR", "FAN", "Fan device"],
+    ["lightDeviceId", "ACTUATOR", "LIGHT", "Light device"],
+  ];
 
-  if (
-    !validateSlotDevice(
-      devices,
-      slots.fanDeviceId,
-      "ACTUATOR",
-      "FAN",
-      "Fan device",
-      setError
-    )
-  ) {
-    return false;
-  }
-
-  if (
-    !validateSlotDevice(
-      devices,
-      slots.lightDeviceId,
-      "ACTUATOR",
-      "LIGHT",
-      "Light device",
-      setError
-    )
-  ) {
-    return false;
+  for (const [field, expectedClass, expectedType, label] of slotRules) {
+    if (!validateSlotDevice(devices, slots[field], expectedClass, expectedType, label, setError)) {
+      return false;
+    }
   }
 
   setError("");

@@ -20,13 +20,23 @@ public class ModeAutomationServiceImpl implements ModeAutomationService {
 
     @Override
     public void evaluateAndApply(Long deviceId) {
-        deviceAutomationAsyncFacade.evaluateOneDeviceAsync(deviceId);
+        evaluateAndApply(deviceId, "scheduler");
+    }
+
+    @Override
+    public void evaluateAndApply(Long deviceId, String reason) {
+        deviceAutomationAsyncFacade.evaluateOneDeviceAsync(deviceId, reason);
     }
 
     @Override
     public void evaluateAllByHome(Long homeId) {
+        evaluateAllByHome(homeId, "scheduler");
+    }
+
+    @Override
+    public void evaluateAllByHome(Long homeId, String reason) {
         deviceRepository.findByHomeId(homeId).forEach(device ->
-                deviceAutomationAsyncFacade.evaluateOneDeviceAsync(device.getId())
+                deviceAutomationAsyncFacade.evaluateOneDeviceAsync(device.getId(), reason)
         );
     }
 }

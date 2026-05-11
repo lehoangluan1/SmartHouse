@@ -13,12 +13,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.java.config.BadRequestException;
 import com.java.config.InvalidTelemetryException;
 import com.java.controller.dto.TelemetryIngestRequest;
 import com.java.domain.events.TelemetryReceivedEvent;
+import com.java.domain.service.dto.TelemetryPersistenceResult;
 import com.java.eventing.DomainEventBus;
 import com.java.mapper.TelemetryEventMapper;
 import com.java.persistence.repo.DeviceRepository;
@@ -37,6 +40,7 @@ public class TelemetryIngestService {
     private final InvalidTelemetryHandler invalidTelemetryHandler;
     private final DeviceRepository deviceRepository;
     private final PlatformTransactionManager transactionManager;
+    private final TelemetryAutomationService telemetryAutomationService;
 
     @Value("${app.telemetry.async.enabled:false}")
     private boolean asyncEnabled;
@@ -105,6 +109,7 @@ public class TelemetryIngestService {
                     result.sensorType().name(),
                     request.value()
             ));
+            scheduleAutomationAfterCommit(result);
 
         } catch (InvalidTelemetryException ex) {
             deviceRepository.findByDeviceKey(request.deviceKey()).ifPresent(device ->
@@ -112,6 +117,20 @@ public class TelemetryIngestService {
             );
             throw new BadRequestException(ex.getMessage());
         }
+    }
+
+    private void scheduleAutomationAfterCommit(TelemetryPersistenceResult result) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    telemetryAutomationService.handle(result);
+                }
+            });
+            return;
+        }
+
+        telemetryAutomationService.handle(result);
     }
 
     private void workerLoop() {

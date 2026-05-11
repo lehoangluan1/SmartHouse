@@ -16,7 +16,12 @@ public class DeviceAutomationAsyncFacade {
 
     @Async("automationExecutor")
     public CompletableFuture<Void> evaluateOneDeviceAsync(Long deviceId) {
-        deviceAutomationWorker.evaluateAndApplyOneDevice(deviceId);
+        return evaluateOneDeviceAsync(deviceId, "scheduler");
+    }
+
+    @Async("automationExecutor")
+    public CompletableFuture<Void> evaluateOneDeviceAsync(Long deviceId, String reason) {
+        deviceAutomationWorker.evaluateAndApplyOneDevice(deviceId, reason);
         return CompletableFuture.completedFuture(null);
     }
 }
