@@ -99,9 +99,14 @@ LOCAL_COMMAND_MAX_PER_KEY = int(os.getenv("LOCAL_COMMAND_MAX_PER_KEY", "20"))
 # Async telemetry queue. YoloBit receives response immediately; gateway forwards to backend in background.
 TELEMETRY_ASYNC = os.getenv("TELEMETRY_ASYNC", "true").lower() == "true"
 TELEMETRY_QUEUE_MAX = int(os.getenv("TELEMETRY_QUEUE_MAX", "300"))
-TELEMETRY_Q = deque(maxlen=TELEMETRY_QUEUE_MAX)
+TELEMETRY_RETRY_DELAY = float(os.getenv("TELEMETRY_RETRY_DELAY", "0.4"))
+TELEMETRY_MAX_ATTEMPTS = int(os.getenv("TELEMETRY_MAX_ATTEMPTS", "8"))
+TELEMETRY_Q = deque()
 TELEMETRY_WORKER_STARTED = False
 TELEMETRY_LOCK = threading.RLock()
+TELEMETRY_CACHE_BY_DEVICE = {}
+TELEMETRY_CACHE_BY_HOME = defaultdict(dict)
+TELEMETRY_SEQ = 0
 
 ACK_QUEUE_MAX = int(os.getenv("ACK_QUEUE_MAX", "200"))
 ACK_RETRY_DELAY = float(os.getenv("ACK_RETRY_DELAY", "0.4"))
@@ -110,6 +115,8 @@ ACK_Q = deque()
 ACK_LOCK = threading.RLock()
 ACK_WORKER_STARTED = False
 
+PROXY_CACHE = {}
+PROXY_CACHE_LOCK = threading.RLock()
 
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_MAX_REQUESTS_DEFAULT = int(os.getenv("RATE_LIMIT_MAX_REQUESTS_DEFAULT", "180"))
@@ -120,12 +127,50 @@ RATE_LIMIT_MAX_REQUESTS_COMMAND = int(os.getenv("RATE_LIMIT_MAX_REQUESTS_COMMAND
 request_log = defaultdict(deque)
 
 ALLOWED_SENSOR_TYPES = {"temperature", "humidity", "light", "motion"}
+SENSOR_TYPE_ALIASES = {
+    "temp": "temperature",
+    "temperature": "temperature",
+    "nhiet_do": "temperature",
+    "humidity": "humidity",
+    "humid": "humidity",
+    "hum": "humidity",
+    "do_am": "humidity",
+    "light": "light",
+    "lightintensity": "light",
+    "light_intensity": "light",
+    "light-intensity": "light",
+    "light sensor": "light",
+    "light_sensor": "light",
+    "lux": "light",
+    "ldr": "light",
+    "shine": "light",
+    "brightness": "light",
+    "motion": "motion",
+    "pir": "motion",
+    "presence": "motion",
+    "object": "motion",
+    "object detected": "motion",
+    "object_detected": "motion",
+    "objectdetected": "motion",
+    "human": "motion",
+    "human detected": "motion",
+    "human_detected": "motion",
+    "humandetected": "motion",
+    "someone": "motion",
+}
 BACKEND_SENSOR_TYPE_MAP = {
     "temperature": "TEMPERATURE",
     "humidity": "HUMIDITY",
     "light": "LIGHT",
     "motion": "MOTION",
 }
+SENSOR_UNITS = {
+    "temperature": "C",
+    "humidity": "%",
+    "light": "%",
+    "motion": None,
+}
+LIGHT_ACTUATOR_KEYS = {"ohstem-light-ctrl-01"}
 ALLOWED_ALERT_TYPES = {
     "HIGH_TEMPERATURE",
     "WRONG_PASSWORD",
@@ -222,7 +267,7 @@ def mask_token(token):
         return "none"
     if len(token) <= 6:
         return "***"
-    return f"{token[:3]}***{token[-3:]}"
+    return "{}***{}".format(token[:3], token[-3:])
 
 
 def sanitize_upstream_json_response(resp):
@@ -239,6 +284,42 @@ def sanitize_upstream_json_response(resp):
         return jsonify({"status": "ok"}), resp.status_code
 
     return jsonify({"error": "Upstream service error"}), resp.status_code
+
+
+def proxy_cache_put(key, resp):
+    if not 200 <= resp.status_code < 300:
+        return
+    content_type = resp.headers.get("Content-Type", "")
+    if "application/json" not in content_type.lower():
+        return
+    with PROXY_CACHE_LOCK:
+        PROXY_CACHE[key] = {
+            "content": resp.content,
+            "contentType": content_type,
+            "storedAt": iso_now_from_epoch(),
+        }
+
+
+def proxy_cache_response(key, label):
+    with PROXY_CACHE_LOCK:
+        cached = PROXY_CACHE.get(key)
+    if not cached:
+        return None
+
+    logger.warning(
+        "UPSTREAM %s unavailable; returning cached response storedAt=%s",
+        label,
+        cached.get("storedAt"),
+    )
+    return Response(
+        cached.get("content") or b"{}",
+        status=200,
+        headers={
+            "Content-Type": cached.get("contentType") or "application/json",
+            "X-Gateway-Cache": "stale",
+            "X-Gateway-Cache-Stored-At": cached.get("storedAt") or "",
+        },
+    )
 
 
 def upstream_data(resp):
@@ -509,15 +590,223 @@ def coerce_bool(value):
     return None
 
 
+def iso_now_from_epoch(epoch_seconds=None):
+    if epoch_seconds is None:
+        epoch_seconds = time.time()
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch_seconds))
+
+
+def cache_telemetry_local(home_id, device_key, sensor_type, value, raw_payload):
+    global TELEMETRY_SEQ
+
+    now = time.time()
+    with TELEMETRY_LOCK:
+        TELEMETRY_SEQ += 1
+        seq = TELEMETRY_SEQ
+        record = {
+            "homeId": home_id,
+            "deviceKey": device_key,
+            "sensorType": sensor_type,
+            "backendSensorType": BACKEND_SENSOR_TYPE_MAP.get(sensor_type),
+            "value": value,
+            "unit": SENSOR_UNITS.get(sensor_type),
+            "timestamp": iso_now_from_epoch(now),
+            "epochMs": int(now * 1000),
+            "raw": raw_payload,
+            "seq": seq,
+            "source": "gateway-cache",
+        }
+        TELEMETRY_CACHE_BY_DEVICE[(home_id, device_key, sensor_type)] = record
+        TELEMETRY_CACHE_BY_HOME[home_id][sensor_type] = record
+
+    logger.info(
+        "TELEMETRY cached_local homeId=%s key=%s sensorType=%s value=%s seq=%s",
+        home_id,
+        device_key,
+        sensor_type,
+        value,
+        seq,
+    )
+    return record
+
+
+def telemetry_cache_record_to_row(record):
+    if not record:
+        return None
+
+    value = record.get("value")
+    sensor_type = record.get("sensorType")
+    numeric_value = None
+    text_value = None
+    boolean_value = None
+
+    if sensor_type == "motion":
+        boolean_value = coerce_bool(value)
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        numeric_value = value
+    elif isinstance(value, bool):
+        boolean_value = value
+    else:
+        numeric_value = coerce_float(value)
+        if numeric_value is None:
+            text_value = None if value is None else str(value)
+
+    return {
+        "id": "gateway-cache-%s" % record.get("seq"),
+        "sensor_id": None,
+        "sensor_name": record.get("deviceKey"),
+        "sensor_kind": record.get("backendSensorType"),
+        "sensor_type": sensor_type,
+        "device_key": record.get("deviceKey"),
+        "value_numeric": numeric_value,
+        "value_text": text_value,
+        "value_boolean": boolean_value,
+        "value": value,
+        "unit": record.get("unit"),
+        "created_at": record.get("timestamp"),
+        "source": record.get("source"),
+        "raw": record.get("raw"),
+    }
+
+
+def telemetry_snapshot_for_device(home_id, device_key):
+    with TELEMETRY_LOCK:
+        records = [
+            dict(record)
+            for (cached_home_id, cached_key, _sensor_type), record in TELEMETRY_CACHE_BY_DEVICE.items()
+            if cached_home_id == home_id and cached_key == device_key
+        ]
+    records.sort(key=lambda item: item.get("seq", 0))
+    return [telemetry_cache_record_to_row(record) for record in records]
+
+
+def latest_cached_telemetry(home_id, device_key, sensor_type):
+    with TELEMETRY_LOCK:
+        record = TELEMETRY_CACHE_BY_DEVICE.get((home_id, device_key, sensor_type))
+        return dict(record) if record else None
+
+
+def enqueue_telemetry(payload, home_id, device_key, sensor_type, seq, attempt=1, not_before=None):
+    if not_before is None:
+        not_before = time.time()
+
+    item = {
+        "payload": payload,
+        "homeId": home_id,
+        "deviceKey": device_key,
+        "sensorType": sensor_type,
+        "seq": seq,
+        "attempt": attempt,
+        "notBefore": not_before,
+    }
+
+    with TELEMETRY_LOCK:
+        dropped = None
+        if len(TELEMETRY_Q) >= TELEMETRY_QUEUE_MAX:
+            dropped = TELEMETRY_Q.popleft()
+        TELEMETRY_Q.append(item)
+        queue_size = len(TELEMETRY_Q)
+
+    if dropped:
+        logger.warning(
+            "TELEMETRY queue_full_dropped_oldest key=%s sensorType=%s seq=%s",
+            dropped.get("deviceKey"),
+            dropped.get("sensorType"),
+            dropped.get("seq"),
+        )
+
+    return queue_size
+
+
+def schedule_telemetry_retry(item, reason):
+    attempt = int(item.get("attempt") or 1)
+    if attempt >= TELEMETRY_MAX_ATTEMPTS:
+        logger.warning(
+            "TELEMETRY forward_give_up key=%s sensorType=%s seq=%s attempts=%s reason=%s",
+            item.get("deviceKey"),
+            item.get("sensorType"),
+            item.get("seq"),
+            attempt,
+            reason,
+        )
+        return
+
+    delay = min(TELEMETRY_RETRY_DELAY * (2 ** max(0, attempt - 1)), 5.0)
+    queue_size = enqueue_telemetry(
+        item.get("payload"),
+        item.get("homeId"),
+        item.get("deviceKey"),
+        item.get("sensorType"),
+        item.get("seq"),
+        attempt=attempt + 1,
+        not_before=time.time() + delay,
+    )
+    logger.warning(
+        "TELEMETRY forward_failed_retry_scheduled key=%s sensorType=%s seq=%s attempt=%s nextAttempt=%s delay=%.2fs queue=%s reason=%s",
+        item.get("deviceKey"),
+        item.get("sensorType"),
+        item.get("seq"),
+        attempt,
+        attempt + 1,
+        delay,
+        queue_size,
+        reason,
+    )
+
+
 def normalize_sensor_type(raw_value):
     if not isinstance(raw_value, str):
         return None, None
 
-    normalized = raw_value.strip().lower()
+    normalized = raw_value.strip().lower().replace("-", "_")
+    normalized = SENSOR_TYPE_ALIASES.get(normalized, normalized)
     if normalized not in ALLOWED_SENSOR_TYPES:
         return None, None
 
     return normalized, BACKEND_SENSOR_TYPE_MAP[normalized]
+
+
+def first_present(body, keys):
+    for key in keys:
+        if key in body and body.get(key) is not None:
+            return body.get(key)
+    return None
+
+
+def infer_sensor_type_and_value(body):
+    raw_sensor_type = first_present(body, ("sensorType", "sensor_type", "type", "kind", "sensor"))
+    sensor_type, backend_sensor_type = normalize_sensor_type(raw_sensor_type)
+    raw_value = first_present(body, ("value", "val", "reading"))
+
+    if sensor_type is not None:
+        return sensor_type, backend_sensor_type, raw_value
+
+    for key in (
+        "temperature",
+        "temp",
+        "nhiet_do",
+        "humidity",
+        "hum",
+        "do_am",
+        "lightIntensity",
+        "light_intensity",
+        "lux",
+        "light",
+        "shine",
+        "motion",
+        "pir",
+        "someone",
+        "objectDetected",
+        "object_detected",
+        "humanDetected",
+        "human_detected",
+    ):
+        if key in body and body.get(key) is not None:
+            sensor_type, backend_sensor_type = normalize_sensor_type(key)
+            if sensor_type is not None:
+                return sensor_type, backend_sensor_type, body.get(key)
+
+    return None, None, raw_value
 
 
 @app.before_request
@@ -564,6 +853,9 @@ def after_request(resp):
 
     resp.headers["Connection"] = "close"
     resp.headers["Cache-Control"] = "no-store"
+    resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+    resp.headers.setdefault("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Device-Token")
+    resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     return resp
 
 
@@ -585,10 +877,12 @@ def get_devices_by_home(home_id):
 
     try:
         resp = proxy_get(f"{BACKEND_BASE}/api/devices/home/{home_id}", timeout=REGISTRY_TIMEOUT)
+        proxy_cache_put(("devices_by_home", home_id), resp)
         return sanitize_upstream_json_response(resp)
     except requests.RequestException:
         logger.exception("Backend unavailable on get_devices_by_home")
-        return safe_upstream_error("backend")
+        cached = proxy_cache_response(("devices_by_home", home_id), "devices_by_home homeId=%s" % home_id)
+        return cached or safe_upstream_error("backend")
 
 
 @app.route("/gw/devices/<int:device_id>/state", methods=["GET"])
@@ -645,10 +939,12 @@ def get_home_config(home_id):
 
     try:
         resp = proxy_get(f"{BACKEND_BASE}/api/homes/{home_id}/configs", timeout=CONFIG_TIMEOUT)
+        proxy_cache_put(("home_configs", home_id), resp)
         return sanitize_upstream_json_response(resp)
     except requests.RequestException:
         logger.exception("Backend unavailable on get_home_config")
-        return safe_upstream_error("backend")
+        cached = proxy_cache_response(("home_configs", home_id), "home_configs homeId=%s" % home_id)
+        return cached or safe_upstream_error("backend")
 
 
 @app.route("/gw/homes/<int:home_id>/alerts", methods=["POST"])
@@ -713,9 +1009,9 @@ def create_telemetry():
     if not isinstance(body, dict):
         return reject("Invalid JSON body", 400)
 
-    device_key = body.get("deviceKey")
-    sensor_type, backend_sensor_type = normalize_sensor_type(body.get("sensorType"))
-    value = auto_cast_value(body.get("value"))
+    device_key = body.get("deviceKey") or body.get("device_key") or body.get("key")
+    sensor_type, backend_sensor_type, raw_value = infer_sensor_type_and_value(body)
+    value = auto_cast_value(raw_value)
 
     if not isinstance(device_key, str) or not device_key.strip():
         return reject("Invalid deviceKey", 400)
@@ -733,6 +1029,9 @@ def create_telemetry():
 
     if value is None:
         return reject("Missing value", 400)
+
+    if sensor_type == "light" and device_key in LIGHT_ACTUATOR_KEYS:
+        return reject("Light actuator is control-only; use light sensor deviceKey", 400)
 
     if sensor_type == "temperature":
         value = coerce_float(value)
@@ -765,23 +1064,114 @@ def create_telemetry():
         "sensorType": backend_sensor_type,
         "value": value,
     }
+    home_id = request.device_meta["home_id"]
+
+    logger.info(
+        "TELEMETRY received_from_device homeId=%s key=%s sensorType=%s backendSensorType=%s value=%s",
+        home_id,
+        device_key,
+        sensor_type,
+        backend_sensor_type,
+        value,
+    )
+    cached = cache_telemetry_local(home_id, device_key, sensor_type, value, body)
 
     if TELEMETRY_ASYNC:
-        with TELEMETRY_LOCK:
-            before = len(TELEMETRY_Q)
-            TELEMETRY_Q.append(payload)
-            dropped = before == TELEMETRY_QUEUE_MAX and len(TELEMETRY_Q) == TELEMETRY_QUEUE_MAX
-            queue_size = len(TELEMETRY_Q)
-        if dropped:
-            logger.warning("ASYNC telemetry queue full; oldest sample dropped")
-        return jsonify({"data": {"queued": True, "queueSize": queue_size}})
+        queue_size = enqueue_telemetry(
+            payload,
+            home_id,
+            device_key,
+            sensor_type,
+            cached.get("seq"),
+        )
+        return jsonify({
+            "data": {
+                "queued": True,
+                "queueSize": queue_size,
+                "cached": True,
+                "telemetry": telemetry_cache_record_to_row(cached),
+            }
+        })
 
     try:
         resp = proxy_post(f"{BACKEND_BASE}/api/device-telemetry", payload, timeout=TELEMETRY_TIMEOUT)
+        logger.info(
+            "TELEMETRY forwarded_upstream key=%s sensorType=%s seq=%s status=%s",
+            device_key,
+            sensor_type,
+            cached.get("seq"),
+            resp.status_code,
+        )
         return sanitize_upstream_json_response(resp)
-    except requests.RequestException:
-        logger.exception("Backend unavailable on create_telemetry")
-        return safe_upstream_error("backend")
+    except requests.RequestException as exc:
+        logger.warning(
+            "TELEMETRY forward_failed_retry_scheduled key=%s sensorType=%s seq=%s attempt=1 nextAttempt=2 delay=%.2fs reason=%s",
+            device_key,
+            sensor_type,
+            cached.get("seq"),
+            TELEMETRY_RETRY_DELAY,
+            type(exc).__name__,
+        )
+        enqueue_telemetry(
+            payload,
+            home_id,
+            device_key,
+            sensor_type,
+            cached.get("seq"),
+            attempt=2,
+            not_before=time.time() + TELEMETRY_RETRY_DELAY,
+        )
+        return jsonify({
+            "data": {
+                "queued": True,
+                "cached": True,
+                "upstream": "retry_scheduled",
+                "telemetry": telemetry_cache_record_to_row(cached),
+            }
+        })
+
+
+@app.route("/gw/v1/device/<string:device_key>/telemetry", methods=["GET"])
+def get_cached_device_telemetry(device_key):
+    if not device_key or len(device_key) > 100:
+        return reject("Invalid deviceKey", 400)
+
+    key_check = ensure_device_key_allowed(device_key)
+    if key_check:
+        return key_check
+
+    home_id = request.device_meta["home_id"]
+    items = telemetry_snapshot_for_device(home_id, device_key)
+    latest = items[-1] if items else None
+    return jsonify({
+        "data": {
+            "device_key": device_key,
+            "home_id": home_id,
+            "range": request.args.get("range", "cache"),
+            "items": items,
+            "latest": latest,
+            "source": "gateway-cache",
+        }
+    })
+
+
+@app.route("/gw/homes/<int:home_id>/telemetry/snapshot", methods=["GET"])
+def get_cached_home_telemetry(home_id):
+    home_check = ensure_home_allowed(home_id)
+    if home_check:
+        return home_check
+
+    with TELEMETRY_LOCK:
+        records = [dict(record) for record in TELEMETRY_CACHE_BY_HOME.get(home_id, {}).values()]
+    records.sort(key=lambda item: item.get("seq", 0))
+
+    return jsonify({
+        "data": {
+            "home_id": home_id,
+            "items": [telemetry_cache_record_to_row(record) for record in records],
+            "source": "gateway-cache",
+        }
+    })
 
 
 
@@ -1156,22 +1546,63 @@ def telemetry_worker_loop():
     while True:
         try:
             with TELEMETRY_LOCK:
-                if TELEMETRY_Q:
-                    payload = TELEMETRY_Q.popleft()
-                else:
-                    payload = None
-            if payload is None:
+                item = TELEMETRY_Q.popleft() if TELEMETRY_Q else None
+            if item is None:
                 time.sleep(0.03)
+                continue
+
+            now = time.time()
+            not_before = float(item.get("notBefore") or 0)
+            if not_before > now:
+                with TELEMETRY_LOCK:
+                    TELEMETRY_Q.append(item)
+                time.sleep(min(0.05, max(0.01, not_before - now)))
+                continue
+
+            latest = latest_cached_telemetry(
+                item.get("homeId"),
+                item.get("deviceKey"),
+                item.get("sensorType"),
+            )
+            if latest and int(latest.get("seq") or 0) > int(item.get("seq") or 0):
+                logger.info(
+                    "TELEMETRY skip_stale_forward key=%s sensorType=%s seq=%s latestSeq=%s",
+                    item.get("deviceKey"),
+                    item.get("sensorType"),
+                    item.get("seq"),
+                    latest.get("seq"),
+                )
                 continue
 
             t0 = time.time()
             try:
-                resp = proxy_post(f"{BACKEND_BASE}/api/device-telemetry", payload, timeout=TELEMETRY_TIMEOUT)
+                resp = proxy_post(f"{BACKEND_BASE}/api/device-telemetry", item.get("payload"), timeout=TELEMETRY_TIMEOUT)
                 elapsed = round((time.time() - t0) * 1000)
-                logger.info("ASYNC telemetry status=%s %sms", resp.status_code, elapsed)
+                if 200 <= resp.status_code < 300:
+                    logger.info(
+                        "TELEMETRY forwarded_upstream key=%s sensorType=%s seq=%s status=%s %sms attempt=%s",
+                        item.get("deviceKey"),
+                        item.get("sensorType"),
+                        item.get("seq"),
+                        resp.status_code,
+                        elapsed,
+                        item.get("attempt"),
+                    )
+                elif resp.status_code in {408, 409, 425, 429} or resp.status_code >= 500:
+                    schedule_telemetry_retry(item, "status_%s" % resp.status_code)
+                else:
+                    logger.warning(
+                        "TELEMETRY forward_rejected key=%s sensorType=%s seq=%s status=%s %sms attempt=%s",
+                        item.get("deviceKey"),
+                        item.get("sensorType"),
+                        item.get("seq"),
+                        resp.status_code,
+                        elapsed,
+                        item.get("attempt"),
+                    )
             except requests.RequestException as exc:
                 elapsed = round((time.time() - t0) * 1000)
-                logger.warning("ASYNC telemetry failed %sms err=%s", elapsed, type(exc).__name__)
+                schedule_telemetry_retry(item, "%s_%sms" % (type(exc).__name__, elapsed))
 
         except Exception as exc:
             logger.warning("ASYNC telemetry loop err=%s", type(exc).__name__)

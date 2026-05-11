@@ -26,8 +26,8 @@ WIFI_SSID,WIFI_PASS=CFG_WIFI_SSID,CFG_WIFI_PASS
 DOOR_PASS='123456';DOOR_OPEN_MS=5000;IR_TIMEOUT_MS=15000;MAX_FAIL=3;BOOT_GRACE_MS=8000
 CFG={'Thigh':30.0,'Tlow':27.0,'Lhigh':55,'Llow':35,'Tsleep_high':32.0,'Tsleep_low':26.0,'Taway_high':33.0,'Tcritical':35.0,'auto_fan_speed':70,'sleep_fan_speed':30,'away_fan_speed':60}
 KEY={'runtime_key':'yolobit-01','fan_key':'ohstem-fan-ctrl-01','light_key':'ohstem-light-ctrl-01','temp_key':'ohstem-temp-01','humidity_key':'ohstem-humidity-01','light_sensor_key':'ohstem-light-01','motion_key':'ohstem-motion-01','runtime_id':None,'fan_id':None,'light_id':None}
-S={'boot_ms':0,'mode':'away','prev_mode':None,'hold_until':None,'fan_status':'off','fan_speed':0,'light_status':'off','local_fan_status':'off','local_fan_speed':0,'local_light_status':'off','sensor_error':0,'state_error':0,'config_error':0,'telemetry_error':0,'command_error':0,'registry_error':0,'yolo_error':0,'alert_active':0,'security_alert_active':0,'nhiet_do':None,'do_am':None,'shine':None,'pir_motion':0,'camera_human_detected':0,'camera_human_count':0,'camera_confidence':0.0,'camera_motion_detected':0,'camera_motion_score':0.0,'someone':0,'last_human_seen_ms':0,'door_locked':1,'door_open':0,'door_open_until':None,'ir_typing':0,'ir_pass':'','ir_last_input_ms':0,'failed_attempts':0,'last_ir_code':None,'last_ir_ms':0,'ir_pending':None,'last_security_alert_ms':0,'last_gc':0,'server_ready':0,'net_block_until':0,'consecutive_http_fail':0,'last_cmd_apply_ms':0,'last_l1':'','last_l2':'','last_fan_hw':None,'last_light_hw':None,'last_door_hw':None}
-IR_DIGIT_MAP={IR_REMOTE_0:'0',IR_REMOTE_1:'1',IR_REMOTE_2:'2',IR_REMOTE_3:'3',IR_REMOTE_4:'4',IR_REMOTE_5:'5',IR_REMOTE_6:'6',IR_REMOTE_7:'7',IR_REMOTE_8:'8',IR_REMOTE_9:'9'};RAW_IR_DIGIT_MAP={22:'0',12:'1',24:'2',94:'3',8:'4',28:'5',90:'6',66:'7',82:'8',74:'9'};RAW_IR_KEY_SETUP=21;RAW_IR_KEY_OK=13;IR_KEY_SETUP=IR_REMOTE_SETUP;IR_KEY_OK=IR_REMOTE_F;IR_DEBOUNCE_MS=180
+S={'boot_ms':0,'mode':'away','prev_mode':None,'hold_until':None,'fan_status':'off','fan_speed':0,'light_status':'off','local_fan_status':'off','local_fan_speed':0,'local_light_status':'off','sensor_error':0,'state_error':0,'config_error':0,'telemetry_error':0,'command_error':0,'registry_error':0,'yolo_error':0,'alert_active':0,'security_alert_active':0,'nhiet_do':None,'do_am':None,'shine':None,'pir_motion':0,'camera_human_detected':0,'camera_human_count':0,'camera_confidence':0.0,'camera_motion_detected':0,'camera_motion_score':0.0,'someone':0,'last_human_seen_ms':0,'door_locked':1,'door_open':0,'door_open_until':None,'ir_state':'idle','ir_typing':0,'ir_pass':'','ir_last_input_ms':0,'failed_attempts':0,'last_ir_code':None,'last_ir_ms':0,'ir_pending':None,'last_security_alert_ms':0,'last_gc':0,'server_ready':0,'net_block_until':0,'consecutive_http_fail':0,'last_cmd_apply_ms':0,'last_l1':'','last_l2':'','last_fan_hw':None,'last_light_hw':None,'last_door_hw':None}
+IR_DIGIT_MAP={IR_REMOTE_0:'0',IR_REMOTE_1:'1',IR_REMOTE_2:'2',IR_REMOTE_3:'3',IR_REMOTE_4:'4',IR_REMOTE_5:'5',IR_REMOTE_6:'6',IR_REMOTE_7:'7',IR_REMOTE_8:'8',IR_REMOTE_9:'9'};RAW_IR_DIGIT_MAP={22:'0',12:'1',24:'2',94:'3',8:'4',28:'5',90:'6',66:'7',82:'8',74:'9'};RAW_IR_KEY_SETUP=21;RAW_IR_KEY_OK=13;RAW_IR_KEY_CANCEL=7;RAW_IR_KEY_BACK=9;IR_KEY_SETUP=IR_REMOTE_SETUP;IR_KEY_OK=IR_REMOTE_F;IR_KEY_CANCEL=globals().get('IR_REMOTE_A',None);IR_KEY_BACK=globals().get('IR_REMOTE_B',None);IR_DEBOUNCE_MS=180;IR_LOCKOUT_MS=15000
 
 # Network intervals. Keep command/state moderate because YoloBit is single-threaded.
 ITV={
@@ -165,13 +165,18 @@ def fan_hw(on,speed):
 def door_hw(op):
     try:pin4.servo_write(180 if op else 0)
     except:pass
-def open_door():S['door_open']=1;S['door_locked']=0;S['door_open_until']=time.ticks_add(ms(),DOOR_OPEN_MS)
-def close_door():S['door_open']=0;S['door_locked']=1;S['door_open_until']=None
+def open_door():
+    S['door_open']=1;S['door_locked']=0;S['door_open_until']=time.ticks_add(ms(),DOOR_OPEN_MS);S['ir_state']='door_open';S['ir_typing']=0
+    print('DOOR open');print('DOOR open until=',S['door_open_until'])
+def close_door():
+    was=S['door_open'];S['door_open']=0;S['door_locked']=1;S['door_open_until']=None
+    if S['ir_state']=='door_open':S['ir_state']='idle'
+    if was:print('DOOR close')
 def mode_short():return {'auto':'A','manual':'M','sleep':'S','away':'W'}.get(S['mode'],'?')
 
 def update_lcd():
     t='--' if S['nhiet_do'] is None else str(round(S['nhiet_do'],1));h='--' if S['do_am'] is None else str(round(S['do_am'],1));l='--' if S['shine'] is None else str(S['shine']);l1=fit16('T:%s H:%s'%(t,h))
-    if S['ir_typing']:l2=fit16('PASS:'+'*'*len(S['ir_pass']))
+    if S['ir_state']=='password_input':l2=fit16('PASS:'+'*'*len(S['ir_pass']))
     elif S['sensor_error'] and server_error():l2=fit16('L:%s E:SEN+SRV'%l)
     elif S['sensor_error']:l2=fit16('L:%s E:SENSOR'%l)
     elif server_error():l2=fit16('FB %s P%s D%s'%(mode_short(),1 if S['someone'] else 0,1 if S['door_open'] else 0))
@@ -290,44 +295,74 @@ def combine_motion():
     if a:S['someone']=1;S['last_human_seen_ms']=ms()
     elif time.ticks_diff(ms(),S['last_human_seen_ms'])>1800:S['someone']=0
 
-def ir_cancel():S['ir_typing']=0;S['ir_pass']='';S['ir_last_input_ms']=0
-def ir_timeout_check():
-    if S['ir_typing'] and S['ir_last_input_ms'] and time.ticks_diff(ms(),S['ir_last_input_ms'])>=IR_TIMEOUT_MS:ir_cancel()
-def ir_ok():S['ir_pass']='';S['ir_typing']=0;S['ir_last_input_ms']=0;S['failed_attempts']=0;S['security_alert_active']=0;open_door()
-def ir_fail():
-    S['failed_attempts']+=1;S['ir_pass']='';S['ir_typing']=0;S['ir_last_input_ms']=0
-    if S['failed_attempts']>=MAX_FAIL:trigger_security_alert('WRONG_PASSWORD','Nhap sai mat khau %s lan'%S['failed_attempts'])
-def ir_append(ch):
-    if S['ir_typing'] and len(S['ir_pass'])<len(DOOR_PASS):S['ir_pass']+=str(ch);S['ir_last_input_ms']=ms()
+def set_ir_state(st):
+    S['ir_state']=st;S['ir_typing']=1 if st=='password_input' else 0;print('IR state='+st)
+def ir_start(now):
+    S['ir_pass']='';S['ir_last_input_ms']=now;print('IR start password input');set_ir_state('password_input')
+def ir_cancel():
+    S['ir_pass']='';S['ir_last_input_ms']=0;set_ir_state('idle');print('IR cancel')
+def ir_backspace(now):
+    if S['ir_state']!='password_input':return
+    if len(S['ir_pass']):S['ir_pass']=S['ir_pass'][:-1]
+    S['ir_last_input_ms']=now;print('IR backspace buffer='+'*'*len(S['ir_pass']))
+def ir_timeout_check(now):
+    if S['ir_state']=='password_input' and S['ir_last_input_ms'] and time.ticks_diff(now,S['ir_last_input_ms'])>=IR_TIMEOUT_MS:
+        S['ir_pass']='';S['ir_last_input_ms']=0;set_ir_state('idle');print('IR password timeout')
+    if S['ir_state']=='locked_out' and S['ir_last_input_ms'] and time.ticks_diff(now,S['ir_last_input_ms'])>=IR_LOCKOUT_MS:
+        S['ir_pass']='';S['ir_last_input_ms']=0;set_ir_state('idle')
+def ir_ok(now):
+    if S['ir_state']!='password_input':return
+    set_ir_state('verifying')
+    if S['ir_pass']==DOOR_PASS:
+        S['ir_pass']='';S['ir_last_input_ms']=0;S['failed_attempts']=0;S['security_alert_active']=0;print('IR password ok');open_door()
+    else:
+        S['failed_attempts']+=1;print('IR password wrong failed_attempts=%s'%S['failed_attempts']);S['ir_pass']='';S['ir_last_input_ms']=now
+        if S['failed_attempts']>=MAX_FAIL:
+            trigger_security_alert('WRONG_PASSWORD','Nhap sai mat khau %s lan'%S['failed_attempts']);set_ir_state('locked_out')
+        else:set_ir_state('password_input')
+def ir_append(ch,now):
+    if S['ir_state']=='password_input' and len(S['ir_pass'])<len(DOOR_PASS):
+        S['ir_pass']+=str(ch);S['ir_last_input_ms']=now;print('IR digit=%s buffer=%s'%(ch,'*'*len(S['ir_pass'])))
 def get_ir_digit(code):
     if code in IR_DIGIT_MAP:return IR_DIGIT_MAP[code]
     if code in RAW_IR_DIGIT_MAP:return RAW_IR_DIGIT_MAP[code]
     return None
 def is_ir_setup(code):return code==IR_KEY_SETUP or code==RAW_IR_KEY_SETUP
 def is_ir_ok(code):return code==IR_KEY_OK or code==RAW_IR_KEY_OK
+def is_ir_cancel(code):return code==IR_KEY_CANCEL or code==RAW_IR_KEY_CANCEL
+def is_ir_back(code):return code==IR_KEY_BACK or code==RAW_IR_KEY_BACK
 def normalize_ir_code(token,addr,ext):
     for c in(token,ext):
         if c is None:continue
-        if c in IR_DIGIT_MAP or c in RAW_IR_DIGIT_MAP or c in(IR_KEY_SETUP,RAW_IR_KEY_SETUP,IR_KEY_OK,RAW_IR_KEY_OK):return c
+        if c in IR_DIGIT_MAP or c in RAW_IR_DIGIT_MAP or c in(IR_KEY_SETUP,RAW_IR_KEY_SETUP,IR_KEY_OK,RAW_IR_KEY_OK,IR_KEY_CANCEL,RAW_IR_KEY_CANCEL,IR_KEY_BACK,RAW_IR_KEY_BACK):return c
         try:
             ic=int(c)
-            if ic in IR_DIGIT_MAP or ic in RAW_IR_DIGIT_MAP or ic in(IR_KEY_SETUP,RAW_IR_KEY_SETUP,IR_KEY_OK,RAW_IR_KEY_OK):return ic
+            if ic in IR_DIGIT_MAP or ic in RAW_IR_DIGIT_MAP or ic in(IR_KEY_SETUP,RAW_IR_KEY_SETUP,IR_KEY_OK,RAW_IR_KEY_OK,IR_KEY_CANCEL,RAW_IR_KEY_CANCEL,IR_KEY_BACK,RAW_IR_KEY_BACK):return ic
         except:pass
     return None
 def on_ir_received(token,addr,ext):
     code=normalize_ir_code(token,addr,ext)
     if code is not None:S['ir_pending']=code
-def process_ir():
+def run_ir_task(now):
     code=S['ir_pending']
     if code is None:return
-    S['ir_pending']=None;now=ms()
-    if S['last_ir_code']==code and time.ticks_diff(now,S['last_ir_ms'])<IR_DEBOUNCE_MS:return
+    S['ir_pending']=None
+    if S['last_ir_code']==code and time.ticks_diff(now,S['last_ir_ms'])<IR_DEBOUNCE_MS:
+        print('IR duplicate ignored code=',code);return
     S['last_ir_code']=code;S['last_ir_ms']=now
-    if is_ir_setup(code):S['ir_typing']=1;S['ir_pass']='';S['ir_last_input_ms']=now;return
-    if not S['ir_typing']:return
-    if is_ir_ok(code):ir_ok() if S['ir_pass']==DOOR_PASS else ir_fail();return
+    if is_ir_setup(code):
+        if S['ir_state']=='locked_out':print('IR locked_out');return
+        ir_start(now);return
+    if S['ir_state']!='password_input':return
+    if is_ir_cancel(code):ir_cancel();return
+    if is_ir_back(code):ir_backspace(now);return
+    if is_ir_ok(code):ir_ok(now);return
     d=get_ir_digit(code)
-    if d is not None:ir_append(d)
+    if d is not None:ir_append(d,now)
+
+def run_door_task(now):
+    if S['door_open'] and S['door_open_until'] is not None and time.ticks_diff(now,S['door_open_until'])>=0:close_door()
+    if S['door_open']!=S['last_door_hw']:door_hw(S['door_open']);S['last_door_hw']=S['door_open']
 
 def compute_local_fallback():
     fs,sp,ls='off',0,'off'
@@ -373,6 +408,11 @@ def send_one_telemetry():
         S['telemetry_error']=0 if POST('/gw/device-telemetry',{'deviceKey':dk,'sensorType':tp,'value':v}) else 1
         return
     S['telemetry_error']=1
+
+def run_telemetry_task(now):
+    if sensor_valid() and due('telemetry'):
+        send_one_telemetry();done('telemetry');return True
+    return False
 
 def normalize_target(x):return {'mode':'mode','power':'power','fan':'fan','fanstatus':'fan','fan_status':'fan','fanspeed':'fan_speed','fan_speed':'fan_speed','speed':'fan_speed','light':'light','lightstatus':'light','light_status':'light','brightness':'brightness','lightlevel':'brightness','light_level':'brightness'}.get(norm(x).replace('-','_'),norm(x).replace('-','_'))
 def mark_cmd_applied():S['last_cmd_apply_ms']=ms()
@@ -469,35 +509,31 @@ def done(k):
     LAST[k]=ms()
 
 def run_backend_task(now):
-    if S['ir_typing']:return
-
     if ACKQ and due('ack'):
-        flush_acks();done('ack');return
+        flush_acks();done('ack');return True
 
     if PENDING_ALERT is not None and due('alert'):
-        send_pending_alert();done('alert');return
+        send_pending_alert();done('alert');return True
 
     # Fast control: gateway command route is now cache-based and should return quickly.
     if due('command'):
-        fetch_all_cmds();done('command');return
-
-    if sensor_valid() and due('telemetry'):
-        send_one_telemetry();done('telemetry');return
+        fetch_all_cmds();done('command');return True
 
     if due('state'):
-        fetch_all_states();done('state');return
+        fetch_all_states();done('state');return True
 
     if due('yolo'):
         if S['server_ready']:
             try:update_yolo()
             except:S['yolo_error']=1
-        done('yolo');return
+        done('yolo');return True
 
     if due('config'):
-        fetch_config();done('config');return
+        fetch_config();done('config');return True
 
     if due('registry'):
-        load_registry();done('registry');return
+        load_registry();done('registry');return True
+    return False
 
 ir=IR_RX(Pin(pin10.pin,Pin.IN));ir.start();ir.on_received(on_ir_received)
 
@@ -538,10 +574,7 @@ while True:
     if time.ticks_diff(now,LAST['sensor'])>=ITV['sensor']:
         LAST['sensor']=now;read_sensor()
 
-    process_ir();ir_timeout_check()
-
-    if S['door_open'] and S['door_open_until'] is not None and time.ticks_diff(now,S['door_open_until'])>=0:close_door()
-    if S['door_open']!=S['last_door_hw']:door_hw(S['door_open']);S['last_door_hw']=S['door_open']
+    run_ir_task(now);ir_timeout_check(now);run_door_task(now)
 
     combine_motion()
     if S['security_alert_active'] and time.ticks_diff(now,S['last_security_alert_ms'])>=15000:S['security_alert_active']=0
@@ -558,8 +591,9 @@ while True:
     else:
         ITV['state'],ITV['command'],ITV['telemetry'],ITV['yolo']=15000,500,4000,10000
 
-    if net_allowed():run_backend_task(now)
+    if net_allowed():
+        if not run_backend_task(now):run_telemetry_task(now)
 
     if time.ticks_diff(now,LAST['status'])>=ITV['status']:print_status();LAST['status']=now
     perf_tick(time.ticks_diff(ms(),loop_start))
-    time.sleep_ms(2 if S['ir_typing'] else 8)
+    time.sleep_ms(4)

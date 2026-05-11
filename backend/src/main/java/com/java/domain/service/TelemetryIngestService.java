@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.java.config.BadRequestException;
 import com.java.config.InvalidTelemetryException;
 import com.java.controller.dto.TelemetryIngestRequest;
+import com.java.domain.events.TelemetryReceivedEvent;
 import com.java.eventing.DomainEventBus;
 import com.java.mapper.TelemetryEventMapper;
 import com.java.persistence.repo.DeviceRepository;
@@ -97,6 +98,13 @@ public class TelemetryIngestService {
             var result = telemetryPersistenceService.persist(request);
 
             eventBus.publish(telemetryEventMapper.toEvent(result, request.value()));
+            eventBus.publish(new TelemetryReceivedEvent(
+                    result.device().getHome().getId(),
+                    result.device().getId(),
+                    result.sensor().getId(),
+                    result.sensorType().name(),
+                    request.value()
+            ));
 
         } catch (InvalidTelemetryException ex) {
             deviceRepository.findByDeviceKey(request.deviceKey()).ifPresent(device ->

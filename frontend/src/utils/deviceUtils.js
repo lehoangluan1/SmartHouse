@@ -90,7 +90,12 @@ export function toDeviceId(value) {
   return Number.isFinite(num) ? num : null;
 }
 
-export function findConfiguredDevice(devices, candidateIds, expectedType) {
+export function findConfiguredDevice(
+  devices,
+  candidateIds,
+  expectedType,
+  { requireControllable = false } = {}
+) {
   const normalizedIds = candidateIds.map(toDeviceId).filter((id) => id !== null);
 
   if (normalizedIds.length === 0) {
@@ -104,7 +109,7 @@ export function findConfiguredDevice(devices, candidateIds, expectedType) {
       return (
         normalizedIds.includes(deviceId) &&
         deviceType === expectedType &&
-        isControllableDevice(device)
+        (!requireControllable || isControllableDevice(device))
       );
     }) || null
   );
@@ -121,9 +126,13 @@ export function findFirstControllableDevice(devices, expectedType) {
 
 export function buildConfiguredDashboardDevices(devices, slots) {
   const configured = [
-    findConfiguredDevice(devices, [slots?.fanDeviceId], "FAN") ||
+    findConfiguredDevice(devices, [slots?.fanDeviceId], "FAN", {
+      requireControllable: true,
+    }) ||
       findFirstControllableDevice(devices, "FAN"),
-    findConfiguredDevice(devices, [slots?.lightDeviceId], "LIGHT") ||
+    findConfiguredDevice(devices, [slots?.lightDeviceId], "LIGHT", {
+      requireControllable: true,
+    }) ||
       findFirstControllableDevice(devices, "LIGHT"),
   ].filter(Boolean);
 
