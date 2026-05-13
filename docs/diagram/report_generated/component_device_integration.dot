@@ -1,0 +1,67 @@
+digraph ComponentDeviceIntegration {
+  graph [
+    rankdir=LR,
+    label="Biểu đồ thành phần - Tích hợp thiết bị và camera",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.6,
+    ranksep=0.9,
+    splines=ortho
+  ];
+
+  node [fontsize=10, fontname="Arial", style="filled", fillcolor="#FFFFFF"];
+  edge [fontsize=9, fontname="Arial", color="#374151", arrowsize=0.8];
+
+  subgraph cluster_device {
+    label="<<subsystem>> Phía thiết bị";
+    style="rounded";
+    color="#B39DDB";
+
+    firmware [shape=component, label="<<component>>\nFirmware IoT"];
+    simulator [shape=component, label="<<component>>\nMô phỏng thiết bị"];
+  }
+
+  subgraph cluster_gateway {
+    label="<<subsystem>> Gateway";
+    style="rounded";
+    color="#6EA8FE";
+
+    gateway [shape=component, label="<<component>>\nGateway tích hợp"];
+    gw_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#6EA8FE"];
+  }
+
+  subgraph cluster_backend {
+    label="<<subsystem>> Backend API";
+    style="rounded";
+    color="#81C784";
+
+    telemetry_api [shape=component, label="<<component>>\nKhối telemetry"];
+    command_api [shape=component, label="<<component>>\nKhối lệnh thiết bị"];
+    be_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#81C784"];
+  }
+
+  camera [shape=component, label="<<component>>\nDịch vụ camera"];
+
+  i_telemetry [shape=circle, width=1.08, label="ITelemetryAPI", fillcolor="#F7FFF7"];
+  i_command [shape=circle, width=1.28, label="ICommandAPI", fillcolor="#F7FFF7"];
+  i_ack [shape=circle, width=0.9, label="IAckAPI", fillcolor="#F7FFF7"];
+  i_camera [shape=circle, width=0.95, label="ICameraAPI", fillcolor="#F7FFF7"];
+
+  firmware -> gateway [arrowhead=vee, label="MQTT/HTTP"];
+  simulator -> gateway [arrowhead=vee, label="HTTP"];
+  gateway -> gw_port [arrowhead=none];
+
+  gw_port -> i_telemetry [style=dashed, arrowhead=vee, label=""];
+  gw_port -> i_command [style=dashed, arrowhead=vee, label="polling"];
+  gw_port -> i_ack [style=dashed, arrowhead=vee, label=""];
+  gateway -> i_camera [style=dashed, arrowhead=vee, label=""];
+
+  i_telemetry -> be_port [arrowhead=none];
+  i_command -> be_port [arrowhead=none];
+  i_ack -> be_port [arrowhead=none];
+  be_port -> telemetry_api [arrowhead=none];
+  be_port -> command_api [arrowhead=none];
+
+  i_camera -> camera [arrowhead=none];
+}

@@ -1,0 +1,40 @@
+digraph DeploymentDiagram {
+  graph [
+    rankdir=LR,
+    label="Deployment Diagram - Moi truong local bang Docker Compose",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial"
+  ];
+
+  node [fontsize=11, fontname="Arial", style="rounded,filled", fillcolor="#FFFFFF"];
+  edge [fontsize=10, fontname="Arial"];
+
+  browser [shape=box, label="User Browser"];
+  device [shape=box, label="Device / Simulator\nPython or YoloBit"];
+  camera [shape=box3d, label="camera_interface.py\nFlask YOLO API\nport 5000"];
+  gateway [shape=box3d, label="gateway.py\nFlask Gateway\nlocal process"];
+
+  subgraph cluster_compose {
+    label="docker-compose.yml";
+    style="rounded";
+    color="#BFD7FF";
+    frontend [shape=box3d, label="frontend\nNginx container\nhost port 5173 -> 80"];
+    backend [shape=box3d, label="backend\nSpring Boot container\nhost port 8080 -> 8080"];
+    db [shape=cylinder, label="db\nPostgreSQL 18\nhost port 5432 -> 5432"];
+    rabbit [shape=box3d, label="rabbitmq\nports 5672, 15672"];
+    env [shape=note, label=".env\napplication.properties\nVITE_API_BASE_URL"];
+    volume [shape=folder, label="postgres_data\nDocker volume"];
+  }
+
+  browser -> frontend [label="HTTP :5173"];
+  frontend -> backend [label="HTTP REST / SSE :8080"];
+  backend -> db [label="JDBC PostgreSQL"];
+  backend -> rabbit [label="AMQP"];
+  db -> volume [style=dashed, label="persist data"];
+  env -> frontend [style=dashed, label="build args / env"];
+  env -> backend [style=dashed, label="runtime env"];
+  device -> gateway [label="HTTP telemetry / command"];
+  gateway -> backend [label="HTTP REST :8080"];
+  gateway -> camera [label="HTTP /check_human"];
+}

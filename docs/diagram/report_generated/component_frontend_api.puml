@@ -1,0 +1,45 @@
+@startuml
+title Component Diagram - Frontend requires Backend API
+
+skinparam componentStyle uml2
+skinparam linetype ortho
+skinparam shadowing false
+left to right direction
+
+package "Frontend" <<subsystem>> {
+  component "DashboardPage\nConfigPage\nHistoryPage" as Pages <<component>>
+  component "AuthProvider" as AuthProvider <<component>>
+  component "API Client\nfrontend/src/api" as ApiClient <<component>>
+}
+
+package "Backend API" <<subsystem>> {
+  component "AuthController" as AuthController <<component>>
+  component "DashboardController" as DashboardController <<component>>
+  component "ControlController" as ControlController <<component>>
+  component "ConfigController" as ConfigController <<component>>
+}
+
+interface "IAuthAPI" as IAuth
+interface "IDashboardAPI" as IDashboard
+interface "IControlAPI" as IControl
+interface "IConfigAPI" as IConfig
+
+Pages --> ApiClient : uses
+AuthProvider --> ApiClient : token/session
+
+ApiClient ..> IAuth : required socket\nHTTP REST
+ApiClient ..> IDashboard : required socket\nHTTP REST / SSE
+ApiClient ..> IControl : required socket\nHTTP REST
+ApiClient ..> IConfig : required socket\nHTTP REST
+
+IAuth - AuthController : provided lollipop
+IDashboard - DashboardController : provided lollipop
+IControl - ControlController : provided lollipop
+IConfig - ConfigController : provided lollipop
+
+note bottom of ApiClient
+Port: HTTP client
+Source: frontend/src/api/apiClient.js
+end note
+
+@enduml

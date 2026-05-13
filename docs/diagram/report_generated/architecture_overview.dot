@@ -1,0 +1,69 @@
+digraph ArchitectureOverview {
+  graph [
+    rankdir=LR,
+    label="So do tong quan kien truc he thong Smart House",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial"
+  ];
+
+  node [shape=box, style="rounded,filled", fillcolor="#FFFFFF", fontsize=11, fontname="Arial"];
+  edge [fontsize=10, fontname="Arial"];
+
+  user [label="Nguoi dung\ntrinh duyet web"];
+  device [label="Thiet bi / Simulator\naiot_code_v3.py\nvirtual_device_simulator.py"];
+  camera [label="Camera YOLO API\ncamera_interface.py"];
+
+  subgraph cluster_frontend {
+    label="Presentation Layer - frontend/";
+    style="rounded";
+    color="#BFD7FF";
+    frontend [label="React + Vite UI\npages, components, router"];
+    api_client [label="API Client\nfrontend/src/api"];
+    auth_context [label="Auth Provider\nfrontend/src/providers"];
+  }
+
+  subgraph cluster_gateway {
+    label="Device Gateway - gateway.py";
+    style="rounded";
+    color="#D7C8FF";
+    gateway [label="Flask Gateway\ntelemetry, command, YOLO proxy"];
+  }
+
+  subgraph cluster_backend {
+    label="Application Layer - backend/";
+    style="rounded";
+    color="#C8E6C9";
+    controller [label="Controller API\ncontroller/"];
+    security [label="Security + Validation\nconfig/, dto/"];
+    service [label="Domain Service\ndomain/service/"];
+    provider [label="Provider / Policy\ndomain/provider/"];
+    mapper [label="Mapper\nmapper/"];
+    repository [label="Repository\npersistence/repo/"];
+    eventing [label="Eventing + Scheduler\neventing/, scheduler/"];
+  }
+
+  subgraph cluster_data {
+    label="Data / Integration Layer";
+    style="rounded";
+    color="#FFE0B2";
+    postgres [shape=cylinder, label="PostgreSQL\nFlyway schema"];
+    rabbit [shape=box3d, label="RabbitMQ\nuser notification queue"];
+  }
+
+  user -> frontend [label="HTTP"];
+  frontend -> auth_context [label="session state"];
+  frontend -> api_client [label="call API"];
+  api_client -> controller [label="HTTP REST / SSE"];
+  controller -> security [label="JWT, role, validation"];
+  controller -> service [label="delegate use case"];
+  service -> provider [label="policy / strategy"];
+  service -> mapper [label="DTO mapping"];
+  service -> repository [label="data access"];
+  repository -> postgres [label="JPA / SQL"];
+  service -> eventing [label="publish domain event"];
+  eventing -> rabbit [label="RabbitTemplate"];
+  device -> gateway [label="HTTP telemetry / command"];
+  gateway -> controller [label="HTTP REST"];
+  gateway -> camera [label="HTTP /check_human"];
+}

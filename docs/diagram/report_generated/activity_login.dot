@@ -1,0 +1,43 @@
+digraph ActivityLogin {
+  graph [
+    rankdir=TB,
+    label="Biểu đồ hoạt động - Đăng nhập và khởi tạo phiên",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.5,
+    ranksep=0.65,
+    splines=polyline
+  ];
+
+  node [fontsize=11, fontname="Arial", color="#374151", style="filled", fillcolor="#FFFFFF"];
+  edge [fontsize=10, fontname="Arial", color="#374151", arrowsize=0.8];
+
+  start [shape=circle, label="", width=0.25, height=0.25, fixedsize=true, fillcolor="#000000"];
+  open_login [shape=box, style="rounded,filled", label="Mở màn hình đăng nhập"];
+  input_login [shape=box, style="rounded,filled", label="Nhập thông tin đăng nhập\nhoặc chọn Google"];
+  send_request [shape=box, style="rounded,filled", label="Giao diện gửi yêu cầu xác thực"];
+  check_method [shape=box, style="rounded,filled", label="Backend kiểm tra phương thức xác thực"];
+  valid [shape=diamond, label="Thông tin\nhợp lệ?"];
+  create_session [shape=box, style="rounded,filled", label="Tạo JWT và\nthông tin phiên"];
+  save_session [shape=box, style="rounded,filled", label="Giao diện lưu thông tin phiên"];
+  dashboard [shape=box, style="rounded,filled", label="Chuyển người dùng đến Dashboard"];
+  show_error [shape=box, style="rounded,filled", label="Hiển thị thông báo lỗi"];
+  success_end [shape=doublecircle, label="●", width=0.38, height=0.38, fixedsize=true, fontsize=16, margin=0, fillcolor="#FFFFFF"];
+  failure_end [shape=doublecircle, label="●", width=0.38, height=0.38, fixedsize=true, fontsize=16, margin=0, fillcolor="#FFFFFF"];
+
+  start -> open_login;
+  open_login -> input_login;
+  input_login -> send_request;
+  send_request -> check_method;
+  check_method -> valid;
+  valid -> show_error [label="[không hợp lệ]"];
+  valid -> create_session [label="[hợp lệ]"];
+  show_error -> failure_end;
+  create_session -> save_session;
+  save_session -> dashboard;
+  dashboard -> success_end;
+
+  { rank=same; show_error; create_session; }
+  { rank=same; failure_end; save_session; }
+}

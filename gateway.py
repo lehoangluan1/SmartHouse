@@ -53,10 +53,10 @@ GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "9000"))
 # IMPORTANT:
 # These must be shorter than the YoloBit socket timeout.
 # The YoloBit is single-threaded; every slow HTTP request freezes sensor, display and local logic.
-REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "1.2"))
-REGISTRY_TIMEOUT = float(os.getenv("REGISTRY_TIMEOUT", "1.2"))
-CONFIG_TIMEOUT = float(os.getenv("CONFIG_TIMEOUT", "1.2"))
-STATE_TIMEOUT = float(os.getenv("STATE_TIMEOUT", "0.9"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "0.8"))
+REGISTRY_TIMEOUT = float(os.getenv("REGISTRY_TIMEOUT", "0.45"))
+CONFIG_TIMEOUT = float(os.getenv("CONFIG_TIMEOUT", "0.45"))
+STATE_TIMEOUT = float(os.getenv("STATE_TIMEOUT", "0.55"))
 COMMAND_TIMEOUT = float(os.getenv("COMMAND_TIMEOUT", "0.9"))
 TELEMETRY_TIMEOUT = float(os.getenv("TELEMETRY_TIMEOUT", "1.0"))
 ACK_TIMEOUT = float(os.getenv("ACK_TIMEOUT", "0.8"))
@@ -67,12 +67,12 @@ YOLO_TIMEOUT = float(os.getenv("YOLO_TIMEOUT", "1.2"))
 # The gateway polls the cloud/backend in the background.
 # YoloBit polls the gateway cache, so hardware control is not blocked by slow HTTPS.
 COMMAND_PREFETCH_INTERVAL = float(os.getenv("COMMAND_PREFETCH_INTERVAL", "0.3"))
-COMMAND_CACHE_TTL = float(os.getenv("COMMAND_CACHE_TTL", "8.0"))
+COMMAND_CACHE_TTL = float(os.getenv("COMMAND_CACHE_TTL", "20.0"))
 COMMAND_ROUTE_SYNC_FALLBACK = os.getenv("COMMAND_ROUTE_SYNC_FALLBACK", "false").lower() == "true"
 COMMAND_ROUTE_MAX_WAIT = float(os.getenv("COMMAND_ROUTE_MAX_WAIT", "0.15"))
 COMMAND_LONG_POLL_WAIT_MS = int(os.getenv("COMMAND_LONG_POLL_WAIT_MS", "1500"))
 COMMAND_PREFETCH_WAIT_MS = int(os.getenv("COMMAND_PREFETCH_WAIT_MS", "0"))
-COMMAND_PREFETCH_TIMEOUT = float(os.getenv("COMMAND_PREFETCH_TIMEOUT", "0.45"))
+COMMAND_PREFETCH_TIMEOUT = float(os.getenv("COMMAND_PREFETCH_TIMEOUT", "1.5"))
 COMMAND_LONG_POLL_TIMEOUT = max(COMMAND_TIMEOUT, (COMMAND_LONG_POLL_WAIT_MS / 1000.0) + 0.4)
 BACKEND_BATCH_COMMANDS = os.getenv("BACKEND_BATCH_COMMANDS", "true").lower() == "true"
 
@@ -84,12 +84,44 @@ COMMAND_KEYS_SEEN = set()
 COMMAND_PREFETCH_STARTED = False
 COMMAND_INFLIGHT = set()
 COMMAND_LAST_FETCH = {}
-COMMAND_MIN_INTERVAL_PER_KEY = float(os.getenv("COMMAND_MIN_INTERVAL_PER_KEY", "1.0"))
+COMMAND_MIN_INTERVAL_PER_KEY = float(os.getenv("COMMAND_MIN_INTERVAL_PER_KEY", "0.5"))
 COMMAND_LOCK = threading.RLock()
 COMMAND_DELIVERED_TTL = float(os.getenv("COMMAND_DELIVERED_TTL", "60.0"))
 COMMAND_DELIVERED = {}
 COMMAND_ACKED_LOCAL = {}
 COMMAND_ACKED_UPSTREAM = {}
+
+
+
+def parse_csv_str_set(value, default=""):
+    raw = value if value is not None else default
+    return {x.strip() for x in raw.split(",") if x and x.strip()}
+
+# Stability guard for demo/hardware loop.
+# When the house mode is manual, backend/system automation commands for actuators
+# should not fight the user's manual control. The gateway suppresses and ACKs
+# those system commands so they do not get re-delivered forever.
+MODE_DEVICE_KEY = os.getenv("MODE_DEVICE_KEY", "yolobit-01")
+CONTROL_DEVICE_KEYS = parse_csv_str_set(
+    os.getenv("CONTROL_DEVICE_KEYS"),
+    "ohstem-fan-ctrl-01,ohstem-light-ctrl-01",
+)
+ACTUATOR_TARGETS = parse_csv_str_set(
+    os.getenv("ACTUATOR_TARGETS"),
+    "power,fan_speed,speed,brightness,light,fan",
+)
+COMMAND_SUPPRESS_SYSTEM_WHILE_MANUAL = os.getenv(
+    "COMMAND_SUPPRESS_SYSTEM_WHILE_MANUAL", "true"
+).lower() == "true"
+COMMAND_ACK_SUPPRESSED_SYSTEM = os.getenv(
+    "COMMAND_ACK_SUPPRESSED_SYSTEM", "true"
+).lower() == "true"
+COMMAND_SYSTEM_POWER_DEBOUNCE_SECONDS = float(
+    os.getenv("COMMAND_SYSTEM_POWER_DEBOUNCE_SECONDS", "2.0")
+)
+COMMAND_DUPLICATE_VALUE_TTL = float(os.getenv("COMMAND_DUPLICATE_VALUE_TTL", "3.0"))
+COMMAND_MODE_STATE = {"value": os.getenv("COMMAND_INITIAL_MODE", "").strip().lower(), "ts": 0.0}
+COMMAND_LAST_DELIVERED_STATE = {}
 
 # Local instant command queue.
 # Automation can POST directly to gateway; YoloBit receives it on next /gw/commands/next poll.
@@ -117,6 +149,8 @@ ACK_WORKER_STARTED = False
 
 PROXY_CACHE = {}
 PROXY_CACHE_LOCK = threading.RLock()
+PROXY_REFRESH_INFLIGHT = set()
+
 
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_MAX_REQUESTS_DEFAULT = int(os.getenv("RATE_LIMIT_MAX_REQUESTS_DEFAULT", "180"))
@@ -320,6 +354,81 @@ def proxy_cache_response(key, label):
             "X-Gateway-Cache-Stored-At": cached.get("storedAt") or "",
         },
     )
+
+
+def proxy_cache_hit_response(key, label):
+    """Return cached JSON immediately for YoloBit-safe endpoints.
+
+    This is intentionally different from proxy_cache_response(): cache-first is
+    not an error path. The backend refresh happens in the background so slow
+    Render/HTTPS calls do not block the board loop.
+    """
+    with PROXY_CACHE_LOCK:
+        cached = PROXY_CACHE.get(key)
+    if not cached:
+        return None
+
+    logger.info(
+        "UPSTREAM %s cache_first_hit storedAt=%s",
+        label,
+        cached.get("storedAt"),
+    )
+    return Response(
+        cached.get("content") or b"{}",
+        status=200,
+        headers={
+            "Content-Type": cached.get("contentType") or "application/json",
+            "X-Gateway-Cache": "hit",
+            "X-Gateway-Cache-Stored-At": cached.get("storedAt") or "",
+        },
+    )
+
+
+def refresh_proxy_cache_job(key, label, url, timeout):
+    t0 = time.time()
+    try:
+        resp = proxy_get(url, timeout=timeout)
+        elapsed = round((time.time() - t0) * 1000)
+        if 200 <= resp.status_code < 300:
+            proxy_cache_put(key, resp)
+            logger.info(
+                "UPSTREAM %s cache_refresh_ok status=%s %sms url=%s",
+                label,
+                resp.status_code,
+                elapsed,
+                url,
+            )
+        else:
+            logger.warning(
+                "UPSTREAM %s cache_refresh_bad_status status=%s %sms url=%s",
+                label,
+                resp.status_code,
+                elapsed,
+                url,
+            )
+    except requests.RequestException as exc:
+        elapsed = round((time.time() - t0) * 1000)
+        logger.warning(
+            "UPSTREAM %s cache_refresh_failed %sms err=%s detail=%s url=%s",
+            label,
+            elapsed,
+            type(exc).__name__,
+            short_text(exc, 300),
+            url,
+        )
+    finally:
+        with PROXY_CACHE_LOCK:
+            PROXY_REFRESH_INFLIGHT.discard(key)
+
+
+def refresh_proxy_cache_async(key, label, url, timeout):
+    with PROXY_CACHE_LOCK:
+        if key in PROXY_REFRESH_INFLIGHT:
+            return False
+        PROXY_REFRESH_INFLIGHT.add(key)
+
+    UPSTREAM_EXECUTOR.submit(refresh_proxy_cache_job, key, label, url, timeout)
+    return True
 
 
 def upstream_data(resp):
@@ -875,13 +984,25 @@ def get_devices_by_home(home_id):
     if home_check:
         return home_check
 
+    cache_key = ("devices_by_home", home_id)
+    label = "devices_by_home homeId=%s" % home_id
+    url = f"{BACKEND_BASE}/api/devices/home/{home_id}"
+
+    # Cache-first: this endpoint changes slowly, but a slow backend call can
+    # freeze the YoloBit loop. Return the last good registry immediately and
+    # refresh it in the background.
+    cached = proxy_cache_hit_response(cache_key, label)
+    if cached:
+        refresh_proxy_cache_async(cache_key, label, url, REGISTRY_TIMEOUT)
+        return cached
+
     try:
-        resp = proxy_get(f"{BACKEND_BASE}/api/devices/home/{home_id}", timeout=REGISTRY_TIMEOUT)
-        proxy_cache_put(("devices_by_home", home_id), resp)
+        resp = proxy_get(url, timeout=REGISTRY_TIMEOUT)
+        proxy_cache_put(cache_key, resp)
         return sanitize_upstream_json_response(resp)
     except requests.RequestException:
         logger.exception("Backend unavailable on get_devices_by_home")
-        cached = proxy_cache_response(("devices_by_home", home_id), "devices_by_home homeId=%s" % home_id)
+        cached = proxy_cache_response(cache_key, label)
         return cached or safe_upstream_error("backend")
 
 
@@ -937,13 +1058,24 @@ def get_home_config(home_id):
     if home_check:
         return home_check
 
+    cache_key = ("home_configs", home_id)
+    label = "home_configs homeId=%s" % home_id
+    url = f"{BACKEND_BASE}/api/homes/{home_id}/configs"
+
+    # Cache-first: config is slow-changing and should not block the board when
+    # Render/backend has connect/read timeouts.
+    cached = proxy_cache_hit_response(cache_key, label)
+    if cached:
+        refresh_proxy_cache_async(cache_key, label, url, CONFIG_TIMEOUT)
+        return cached
+
     try:
-        resp = proxy_get(f"{BACKEND_BASE}/api/homes/{home_id}/configs", timeout=CONFIG_TIMEOUT)
-        proxy_cache_put(("home_configs", home_id), resp)
+        resp = proxy_get(url, timeout=CONFIG_TIMEOUT)
+        proxy_cache_put(cache_key, resp)
         return sanitize_upstream_json_response(resp)
     except requests.RequestException:
         logger.exception("Backend unavailable on get_home_config")
-        cached = proxy_cache_response(("home_configs", home_id), "home_configs homeId=%s" % home_id)
+        cached = proxy_cache_response(cache_key, label)
         return cached or safe_upstream_error("backend")
 
 
@@ -1354,6 +1486,8 @@ def mark_command_delivered(device_key, cmd):
     with COMMAND_LOCK:
         prune_command_records()
         COMMAND_DELIVERED[command_record_key(device_key, command_id)] = time.time()
+    remember_delivered_state(device_key, cmd)
+    update_command_mode_state(device_key, cmd)
     logger.info(
         "COMMAND delivered_to_device key=%s id=%s target=%s value=%s source=%s",
         device_key,
@@ -1364,9 +1498,133 @@ def mark_command_delivered(device_key, cmd):
     )
 
 
+
+def command_text(value):
+    if value is None:
+        return ""
+    return str(value).strip().lower()
+
+
+def is_mode_command(device_key, cmd):
+    if not isinstance(cmd, dict) or device_key != MODE_DEVICE_KEY:
+        return False
+    return command_text(cmd.get("target")) == "mode"
+
+
+def is_manual_mode_command(device_key, cmd):
+    return is_mode_command(device_key, cmd) and command_text(cmd.get("value")) == "manual"
+
+
+def update_command_mode_state(device_key, cmd):
+    if not is_mode_command(device_key, cmd):
+        return
+    mode_value = command_text(cmd.get("value"))
+    with COMMAND_LOCK:
+        COMMAND_MODE_STATE["value"] = mode_value
+        COMMAND_MODE_STATE["ts"] = time.time()
+        if mode_value == "manual":
+            # Drop cached system actuator commands created before the manual switch.
+            stale_keys = []
+            for key, cached_cmd in list(COMMAND_CACHE.items()):
+                if is_system_actuator_command(key, cached_cmd):
+                    stale_keys.append(key)
+            for key in stale_keys:
+                old = COMMAND_CACHE.pop(key, None)
+                COMMAND_CACHE_TS.pop(key, None)
+                if old is not None:
+                    suppress_command(key, old, "manual_mode_cache_purge")
+    logger.info("COMMAND mode_state value=%s source=%s", mode_value, cmd.get("source"))
+
+
+def current_gateway_mode():
+    with COMMAND_LOCK:
+        return command_text(COMMAND_MODE_STATE.get("value"))
+
+
+def is_system_actuator_command(device_key, cmd):
+    if not isinstance(cmd, dict):
+        return False
+    if device_key not in CONTROL_DEVICE_KEYS:
+        return False
+    source = command_text(cmd.get("source"))
+    target = command_text(cmd.get("target"))
+    return source == "system" and target in ACTUATOR_TARGETS
+
+
+def should_suppress_command_delivery(device_key, cmd, pending_manual=False):
+    if not isinstance(cmd, dict):
+        return False, ""
+
+    if is_system_actuator_command(device_key, cmd):
+        if COMMAND_SUPPRESS_SYSTEM_WHILE_MANUAL and (pending_manual or current_gateway_mode() == "manual"):
+            return True, "system_command_while_manual"
+
+        target = command_text(cmd.get("target"))
+        value = command_text(cmd.get("value"))
+        now = time.time()
+        state_key = (device_key, target)
+        with COMMAND_LOCK:
+            last = COMMAND_LAST_DELIVERED_STATE.get(state_key)
+        if last:
+            last_value = command_text(last.get("value"))
+            age = now - float(last.get("ts") or 0)
+            if value == last_value and age < COMMAND_DUPLICATE_VALUE_TTL:
+                return True, "duplicate_system_value"
+            if target == "power" and value != last_value and age < COMMAND_SYSTEM_POWER_DEBOUNCE_SECONDS:
+                return True, "system_power_chatter"
+
+    return False, ""
+
+
+def remember_delivered_state(device_key, cmd):
+    if not isinstance(cmd, dict):
+        return
+    target = command_text(cmd.get("target"))
+    if not target:
+        return
+    with COMMAND_LOCK:
+        COMMAND_LAST_DELIVERED_STATE[(device_key, target)] = {
+            "value": cmd.get("value"),
+            "source": cmd.get("source"),
+            "id": cmd.get("id"),
+            "ts": time.time(),
+        }
+
+
+def suppress_command(device_key, cmd, reason):
+    if not isinstance(cmd, dict):
+        return
+    command_id = command_id_of(cmd)
+    now = time.time()
+    if command_id is not None:
+        with COMMAND_LOCK:
+            prune_command_records(now)
+            COMMAND_ACKED_LOCAL[command_record_key(device_key, command_id)] = now
+    logger.warning(
+        "COMMAND suppressed key=%s id=%s target=%s value=%s source=%s reason=%s ack=%s",
+        device_key,
+        command_id,
+        cmd.get("target"),
+        cmd.get("value"),
+        cmd.get("source"),
+        reason,
+        COMMAND_ACK_SUPPRESSED_SYSTEM,
+    )
+    if COMMAND_ACK_SUPPRESSED_SYSTEM and command_id is not None:
+        try:
+            enqueue_ack(device_key, int(command_id))
+        except Exception as exc:
+            logger.warning("COMMAND suppress_ack_failed key=%s id=%s err=%s", device_key, command_id, type(exc).__name__)
+
+
 def command_cache_put(device_key, cmd):
     cmd = normalize_backend_command(device_key, cmd)
     if cmd is None:
+        return
+
+    suppress, reason = should_suppress_command_delivery(device_key, cmd)
+    if suppress:
+        suppress_command(device_key, cmd, reason)
         return
 
     with COMMAND_LOCK:
@@ -1796,6 +2054,12 @@ def get_next_command(device_key):
         )
 
     if isinstance(data, dict):
+        suppress, reason = should_suppress_command_delivery(device_key, data)
+        if suppress:
+            suppress_command(device_key, data, reason)
+            data = None
+
+    if isinstance(data, dict):
         mark_command_delivered(device_key, data)
         logger.info(
             "COMMAND received/route key=%s id=%s target=%s value=%s source=%s",
@@ -1850,6 +2114,14 @@ def get_next_commands():
             for device_key in keys
         ]
         out = parallel_fetch(items, timeout=COMMAND_ROUTE_MAX_WAIT)
+
+    pending_manual = any(is_manual_mode_command(device_key, data) for device_key, data in out.items())
+    for device_key, data in list(out.items()):
+        if isinstance(data, dict):
+            suppress, reason = should_suppress_command_delivery(device_key, data, pending_manual=pending_manual)
+            if suppress:
+                suppress_command(device_key, data, reason)
+                out[device_key] = None
 
     for device_key, data in out.items():
         if isinstance(data, dict):

@@ -1,0 +1,44 @@
+@startuml
+title Sequence Diagram - Gui telemetry tu thiet bi len he thong
+
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 80
+skinparam shadowing false
+hide footbox
+
+actor "IoT Device /\nSimulator" as Device
+participant "gateway.py" as Gateway
+participant "TelemetryController" as Controller
+participant "TelemetryIngestService" as IngestService
+database "PostgreSQL" as DB
+participant "DomainEventBus" as EventBus
+
+Device -> Gateway : sendTelemetry(payload)
+activate Gateway
+
+Gateway -> Controller : POST /api/device-telemetry
+activate Controller
+
+Controller -> IngestService : ingest(payload)
+activate IngestService
+
+IngestService -> DB : validate device/sensor\nsave sensor_data\nupdate runtime state
+activate DB
+DB --> IngestService : persisted
+deactivate DB
+
+IngestService -> EventBus : publish TelemetryReceived
+activate EventBus
+EventBus --> IngestService : accepted
+deactivate EventBus
+
+IngestService --> Controller : ingest result
+deactivate IngestService
+
+Controller --> Gateway : 200 OK
+deactivate Controller
+
+Gateway --> Device : telemetry accepted
+deactivate Gateway
+
+@enduml

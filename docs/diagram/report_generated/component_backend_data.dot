@@ -1,0 +1,57 @@
+digraph ComponentBackendData {
+  graph [
+    rankdir=LR,
+    label="Biểu đồ thành phần - Xử lý nghiệp vụ và lưu trữ dữ liệu",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.6,
+    ranksep=0.9,
+    splines=ortho
+  ];
+
+  node [fontsize=10, fontname="Arial", style="filled", fillcolor="#FFFFFF"];
+  edge [fontsize=9, fontname="Arial", color="#374151", arrowsize=0.8];
+
+  subgraph cluster_backend {
+    label="<<subsystem>> Tầng xử lý nghiệp vụ";
+    style="rounded";
+    color="#81C784";
+
+    api_boundary [shape=component, label="<<component>>\nĐầu vào API"];
+    business [shape=component, label="<<component>>\nKhối xử lý nghiệp vụ"];
+    policy [shape=component, label="<<component>>\nChính sách và quy tắc"];
+    persistence [shape=component, label="<<component>>\nKhối lưu trữ"];
+    events [shape=component, label="<<component>>\nKhối sự kiện và lịch"];
+  }
+
+  subgraph cluster_data {
+    label="<<subsystem>> Hạ tầng dữ liệu";
+    style="rounded";
+    color="#FFB74D";
+
+    postgres [shape=cylinder, label="<<datastore>>\nPostgreSQL"];
+    rabbitmq [shape=component, label="<<message broker>>\nRabbitMQ"];
+    db_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#FFB74D"];
+    mq_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#FFB74D"];
+  }
+
+  i_repository [shape=circle, width=1.12, label="RepositoryPort", fillcolor="#FFF8E1"];
+  i_jdbc [shape=circle, width=0.72, label="JDBC", fillcolor="#FFF8E1"];
+  i_amqp [shape=circle, width=0.75, label="AMQP", fillcolor="#FFF8E1"];
+
+  api_boundary -> business [arrowhead=vee];
+  business -> policy [arrowhead=vee];
+  business -> events [arrowhead=vee];
+
+  business -> i_repository [style=dashed, arrowhead=vee, label=""];
+  i_repository -> persistence [arrowhead=none];
+
+  persistence -> i_jdbc [style=dashed, arrowhead=vee, label=""];
+  i_jdbc -> db_port [arrowhead=none];
+  db_port -> postgres [arrowhead=none];
+
+  events -> i_amqp [style=dashed, arrowhead=vee, label=""];
+  i_amqp -> mq_port [arrowhead=none];
+  mq_port -> rabbitmq [arrowhead=none];
+}

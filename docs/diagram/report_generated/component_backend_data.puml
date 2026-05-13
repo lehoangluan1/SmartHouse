@@ -1,0 +1,46 @@
+@startuml
+title Component Diagram - Backend Service, Repository va Data Store
+
+skinparam componentStyle uml2
+skinparam linetype ortho
+skinparam shadowing false
+left to right direction
+
+package "Backend Application" <<subsystem>> {
+  component "REST Controllers" as Controllers <<component>>
+  component "Business Services" as Services <<component>>
+  component "Domain Providers\nPolicies / Strategies" as Providers <<component>>
+  component "Repositories" as Repositories <<component>>
+  component "Entities / DTO / Mapper" as Models <<component>>
+  component "Eventing / Scheduler" as Events <<component>>
+}
+
+database "PostgreSQL" as DB <<datastore>>
+queue "RabbitMQ" as RabbitMQ <<message broker>>
+
+interface "RepositoryPort" as RepositoryPort
+interface "JDBC" as JDBC
+interface "AMQP" as AMQP
+
+Controllers --> Services : delegate use case
+Services --> Providers : apply policy/strategy
+Services ..> RepositoryPort : required socket
+RepositoryPort - Repositories : provided lollipop
+Repositories --> Models : map entity
+Repositories ..> JDBC : required socket
+JDBC - DB : provided lollipop
+Events ..> AMQP : required socket
+AMQP - RabbitMQ : provided lollipop
+Services --> Events : publish/schedule
+
+note bottom of Repositories
+Port: persistence access
+Source: persistence/repo
+end note
+
+note bottom of Events
+Source: eventing, scheduler,
+RabbitMqConfig, OutboxEventPublisher
+end note
+
+@enduml

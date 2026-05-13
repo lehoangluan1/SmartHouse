@@ -1,0 +1,89 @@
+@startuml
+title Component Diagram - Subsystem, Provided Interface va Required Interface
+
+skinparam componentStyle uml2
+skinparam linetype ortho
+skinparam shadowing false
+skinparam maxMessageSize 80
+left to right direction
+
+package "Frontend" <<subsystem>> {
+  component "Dashboard UI" as DashboardUI <<component>>
+  component "Auth Provider" as AuthProvider <<component>>
+  component "API Client" as ApiClient <<component>>
+}
+
+package "Backend" <<subsystem>> {
+  component "AuthController" as AuthController <<component>>
+  component "DashboardController" as DashboardController <<component>>
+  component "TelemetryController" as TelemetryController <<component>>
+  component "ControlController" as ControlController <<component>>
+  component "CommandController" as CommandController <<component>>
+  component "Business Services" as Services <<component>>
+  component "Repositories" as Repositories <<component>>
+}
+
+database "PostgreSQL" as PostgreSQL <<datastore>>
+
+package "Device Integration" <<subsystem>> {
+  component "gateway.py" as Gateway <<component>>
+  component "virtual_device_simulator.py" as Simulator <<component>>
+}
+
+component "Camera Service\ncamera_interface.py" as CameraService <<component>>
+
+interface "IAuthAPI" as IAuth
+interface "IDashboardAPI" as IDashboard
+interface "ITelemetryAPI" as ITelemetry
+interface "IControlAPI" as IControl
+interface "ICommandPollingAPI" as ICommand
+interface "ICameraAPI" as ICamera
+interface "JDBC" as JDBC
+
+DashboardUI --> ApiClient : uses
+AuthProvider --> ApiClient : uses
+
+ApiClient ..> IAuth : requires socket
+ApiClient ..> IDashboard : requires socket
+ApiClient ..> IControl : requires socket
+
+IAuth - AuthController : provides lollipop
+IDashboard - DashboardController : provides lollipop
+ITelemetry - TelemetryController : provides lollipop
+IControl - ControlController : provides lollipop
+ICommand - CommandController : provides lollipop
+
+AuthController --> Services
+DashboardController --> Services
+TelemetryController --> Services
+ControlController --> Services
+CommandController --> Services
+Services --> Repositories
+
+Repositories ..> JDBC : requires socket
+JDBC - PostgreSQL : provides lollipop
+
+Simulator --> Gateway : sends telemetry / polls command
+Gateway ..> ITelemetry : requires socket
+Gateway ..> ICommand : requires socket
+Gateway ..> ICamera : requires socket
+ICamera - CameraService : provides lollipop
+
+note right of ApiClient
+Port: HTTP API client
+Required sockets:
+IAuthAPI, IDashboardAPI, IControlAPI
+end note
+
+note right of Gateway
+Port: Device integration client
+Required sockets:
+ITelemetryAPI, ICommandPollingAPI, ICameraAPI
+end note
+
+note bottom of Repositories
+Port: JDBC data access
+Required socket: JDBC
+end note
+
+@enduml

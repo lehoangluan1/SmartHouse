@@ -1,0 +1,118 @@
+digraph ComponentDiagram {
+  graph [
+    rankdir=LR,
+    label="UML Component Diagram - Smart House",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.55,
+    ranksep=0.85,
+    splines=polyline
+  ];
+
+  node [shape=component, style="filled", fillcolor="#FFFFFF", fontsize=10, fontname="Arial"];
+  edge [fontsize=9, fontname="Arial"];
+
+  subgraph cluster_frontend {
+    label="<<subsystem>> Frontend - frontend/src";
+    style="rounded";
+    color="#6EA8FE";
+
+    dashboard_ui [label="<<component>>\nDashboardPage\nConfigPage\nHistoryPage"];
+    auth_provider [label="<<component>>\nAuthProvider"];
+    app_router [label="<<component>>\nAppRouter\nRoute guards"];
+    api_client [label="<<component>>\nAPI Client\nfrontend/src/api"];
+    fe_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#6EA8FE"];
+  }
+
+  subgraph cluster_backend {
+    label="<<application>> Spring Boot Backend - backend/src/main/java/com/java";
+    style="rounded";
+    color="#81C784";
+
+    auth_controller [label="<<component>>\nAuthController"];
+    dashboard_controller [label="<<component>>\nDashboardController\nREST + SSE"];
+    telemetry_controller [label="<<component>>\nTelemetryController"];
+    control_controller [label="<<component>>\nControlController\nCommandController"];
+    config_controller [label="<<component>>\nConfigController\nAudit/Alert APIs"];
+    business_services [label="<<component>>\nBusiness Services\nservice/provider"];
+    repositories [label="<<component>>\nRepositories\nJpaRepository"];
+    entities_dto [label="<<component>>\nEntities / DTO / Mapper"];
+    security_config [label="<<component>>\nSecurity + Exception\nJWT, CORS, validation"];
+    be_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#81C784"];
+  }
+
+  subgraph cluster_data {
+    label="<<subsystem>> Data Layer";
+    style="rounded";
+    color="#FFB74D";
+
+    postgres [shape=cylinder, label="<<datastore>>\nPostgreSQL\nusers, devices, sensors,\nsensor_data, configs,\ncontrol_commands, alerts,\nactivity_logs"];
+    db_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#FFB74D"];
+  }
+
+  subgraph cluster_device {
+    label="<<subsystem>> Device Integration";
+    style="rounded";
+    color="#B39DDB";
+
+    gateway [label="<<component>>\nFlask Gateway\ngateway.py"];
+    simulator [label="<<component>>\nDevice / Simulator\naiot_code_v3.py\nvirtual_device_simulator.py"];
+    camera [label="<<component>>\nCamera Service\ncamera_interface.py"];
+    gw_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#B39DDB"];
+  }
+
+  i_auth [shape=circle, width=0.85, label="IAuthAPI", fillcolor="#F7FFF7"];
+  i_dashboard [shape=circle, width=1.12, label="IDashboardAPI", fillcolor="#F7FFF7"];
+  i_telemetry [shape=circle, width=1.12, label="ITelemetryAPI", fillcolor="#F7FFF7"];
+  i_control [shape=circle, width=1.0, label="IControlAPI", fillcolor="#F7FFF7"];
+  i_command [shape=circle, width=1.35, label="ICommand\nPollingAPI", fillcolor="#F7FFF7"];
+  i_camera [shape=circle, width=0.95, label="ICameraAPI", fillcolor="#F7FFF7"];
+  jdbc [shape=circle, width=0.7, label="JDBC", fillcolor="#FFF8E1"];
+
+  legend [shape=note, label="Legend\ncircle = provided interface\nsmall square = port\ndashed edge = required interface\nsolid edge = assembly connector", fillcolor="#F8F9FA"];
+
+  app_router -> dashboard_ui [label="render"];
+  dashboard_ui -> auth_provider [label="read auth state"];
+  dashboard_ui -> api_client [label="call service"];
+  auth_provider -> api_client [label="token"];
+  api_client -> fe_port [label="HTTP client port"];
+
+  fe_port -> i_auth [style=dashed, label="requires"];
+  fe_port -> i_dashboard [style=dashed, label="requires"];
+  fe_port -> i_control [style=dashed, label="requires"];
+
+  i_auth -> be_port [label="assembly"];
+  i_dashboard -> be_port [label="assembly"];
+  i_control -> be_port [label="assembly"];
+  i_telemetry -> be_port [label="assembly"];
+  i_command -> be_port [label="assembly"];
+
+  be_port -> auth_controller [label="provides"];
+  be_port -> dashboard_controller [label="provides"];
+  be_port -> telemetry_controller [label="provides"];
+  be_port -> control_controller [label="provides"];
+  be_port -> config_controller [label="provides"];
+
+  auth_controller -> security_config [label="authenticate"];
+  auth_controller -> business_services [label="delegate"];
+  dashboard_controller -> business_services [label="query summary"];
+  telemetry_controller -> business_services [label="ingest telemetry"];
+  control_controller -> business_services [label="create/poll command"];
+  config_controller -> business_services [label="manage config/audit"];
+  business_services -> repositories [label="data access"];
+  business_services -> entities_dto [label="map data"];
+  repositories -> entities_dto [label="ORM mapping"];
+  repositories -> jdbc [style=dashed, label="requires"];
+  jdbc -> db_port [label="assembly"];
+  db_port -> postgres [label="provides"];
+
+  simulator -> gateway [label="telemetry / command"];
+  gateway -> gw_port [label="HTTP client port"];
+  gw_port -> i_telemetry [style=dashed, label="requires"];
+  gw_port -> i_command [style=dashed, label="requires"];
+  gateway -> i_camera [style=dashed, label="requires"];
+  i_camera -> camera [label="provides"];
+
+  legend -> api_client [style=dotted, arrowhead=none];
+}

@@ -1,0 +1,66 @@
+\section{Đặc tả hệ thống}
+
+\subsection{Bối cảnh}
+
+Trong bối cảnh Internet of Things (IoT) được ứng dụng ngày càng nhiều trong quản lý nhà ở, hệ thống nhà thông minh cần đáp ứng đồng thời ba yêu cầu: giám sát môi trường, điều khiển thiết bị và truy vết quá trình vận hành. Một hệ thống chỉ bật/tắt thiết bị đơn lẻ chưa đủ để phản ánh bài toán thực tế, vì người dùng còn cần biết dữ liệu cảm biến đến từ đâu, hệ thống tự động ra quyết định như thế nào và các thay đổi đã được ghi nhận ra sao.
+
+Dự án Smart House được xây dựng nhằm quản lý một mô hình nhà thông minh mẫu. Hệ thống tập trung vào dashboard web, backend API, cơ sở dữ liệu PostgreSQL, gateway thiết bị, mô phỏng thiết bị và dịch vụ camera nhận diện người. Các luồng chính gồm đăng nhập, phân quyền, quản lý nhà và thành viên, giám sát cảm biến, điều khiển quạt/đèn/chế độ, cấu hình ngưỡng tự động, lập lịch, cảnh báo, lịch sử dữ liệu và nhật ký audit.
+
+\subsection{Các bên liên quan (stakeholders)}
+
+Hệ thống Smart House bao gồm các bên liên quan chính sau:
+
+\begin{itemize}
+
+    \item \textbf{Chủ nhà / thành viên trong nhà}
+    \begin{itemize}
+        \item Theo dõi dữ liệu môi trường như nhiệt độ, độ ẩm, ánh sáng và chuyển động.
+        \item Điều khiển thiết bị thuộc nhà được cấp quyền, gồm quạt, đèn và chế độ vận hành.
+        \item Xem lịch sử dữ liệu, trạng thái thiết bị và cảnh báo phát sinh.
+    \end{itemize}
+
+    \item \textbf{Quản trị viên}
+    \begin{itemize}
+        \item Quản lý tài khoản, quyền truy cập và nhật ký hệ thống.
+        \item Cấu hình ngưỡng tự động, lịch chế độ và hồ sơ vận hành của nhà.
+        \item Theo dõi hoạt động audit để kiểm tra thay đổi cấu hình, cảnh báo và thao tác điều khiển.
+    \end{itemize}
+
+    \item \textbf{Kỹ thuật viên / bên lắp đặt}
+    \begin{itemize}
+        \item Theo dõi trạng thái thiết bị và các cảnh báo liên quan đến kết nối hoặc cảm biến.
+        \item Hỗ trợ xử lý cảnh báo và bảo trì thiết bị khi có sự cố.
+    \end{itemize}
+
+    \item \textbf{Thiết bị IoT và gateway}
+    \begin{itemize}
+        \item Gửi telemetry từ các cảm biến lên backend.
+        \item Nhận lệnh điều khiển đang chờ và gửi xác nhận sau khi xử lý.
+        \item Kết nối thêm dịch vụ camera để phục vụ nhận diện người và chuyển động.
+    \end{itemize}
+
+\end{itemize}
+
+\subsection{Mục tiêu dự án}
+
+\begin{itemize}
+    \item Xây dựng hệ thống Smart House dựa trên mô hình IoT có frontend, backend, database và gateway thiết bị.
+    \item Thu thập dữ liệu từ các cảm biến nhiệt độ, độ ẩm, ánh sáng, chuyển động và các loại cảm biến mở rộng được định nghĩa trong hệ thống.
+    \item Quản lý thiết bị theo mô hình capability, trong đó mỗi thiết bị có các năng lực như \texttt{POWER}, \texttt{SPEED}, \texttt{BRIGHTNESS}, \texttt{MODE}, \texttt{TEMPERATURE}, \texttt{HUMIDITY}, \texttt{MOTION}.
+    \item Hỗ trợ điều khiển thủ công, điều khiển tự động theo cấu hình, lịch chạy nền và cơ chế giữ trạng thái thủ công tạm thời.
+    \item Cung cấp dashboard web để hiển thị dữ liệu giám sát, trạng thái thiết bị, cảnh báo và cập nhật realtime bằng Server-Sent Events.
+    \item Lưu trữ dữ liệu cảm biến, trạng thái hiện tại, lịch sử trạng thái, lệnh điều khiển, cảnh báo và nhật ký audit trong PostgreSQL.
+    \item Hỗ trợ xác thực bằng tài khoản cục bộ, Google OAuth, JWT access token và refresh token.
+    \item Tích hợp RabbitMQ cho luồng sự kiện người dùng thông qua bảng outbox, đồng thời hỗ trợ thông báo email/Telegram khi cấu hình được bật.
+\end{itemize}
+
+\subsection{Phạm vi dự án}
+
+\begin{itemize}
+    \item Frontend web được xây dựng bằng React và Vite, gồm các màn hình đăng nhập, dashboard, lịch sử, cấu hình, cài đặt, audit log và quản lý người dùng.
+    \item Backend được xây dựng bằng Java 17 và Spring Boot, cung cấp RESTful API cho xác thực, thiết bị, telemetry, điều khiển, cấu hình, cảnh báo, lịch, thành viên nhà và audit.
+    \item Cơ sở dữ liệu PostgreSQL được quản lý bằng Flyway migration, sử dụng các bảng thực tế như \texttt{users}, \texttt{homes}, \texttt{devices}, \texttt{sensors}, \texttt{sensor\_data}, \texttt{configs}, \texttt{control\_commands}, \texttt{alerts}, \texttt{activity\_logs}.
+    \item Gateway Python bằng Flask làm lớp trung gian cho thiết bị, hỗ trợ gửi telemetry, lấy lệnh điều khiển, xác nhận lệnh và gọi dịch vụ YOLO.
+    \item Mã thiết bị OhStem/YoloBit và simulator Python phục vụ demo luồng cảm biến, điều khiển, hồng ngoại, cửa, quạt, đèn và fallback cục bộ.
+    \item Dịch vụ camera dùng OpenCV và Ultralytics YOLO để phát hiện người/chuyển động qua endpoint \texttt{/check\_human}.
+\end{itemize}

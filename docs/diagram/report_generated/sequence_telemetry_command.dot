@@ -1,0 +1,85 @@
+digraph SequenceTelemetryCommand {
+  graph [
+    rankdir=TB,
+    label="UML Sequence Diagram - Telemetry and Command Polling",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.55,
+    ranksep=0.45,
+    splines=polyline
+  ];
+
+  node [fontsize=9, fontname="Arial"];
+  edge [fontsize=8, fontname="Arial"];
+
+  device_top [shape=box, label="Device /\nSimulator", style="rounded,filled", fillcolor="#E3F2FD"];
+  gateway_top [shape=box, label="gateway.py", style="rounded,filled", fillcolor="#E3F2FD"];
+  telemetry_top [shape=box, label="Telemetry\nController", style="rounded,filled", fillcolor="#E8F5E9"];
+  ingest_top [shape=box, label="Telemetry\nIngestService", style="rounded,filled", fillcolor="#E8F5E9"];
+  db_top [shape=cylinder, label="PostgreSQL", style="filled", fillcolor="#FFF3E0"];
+  command_top [shape=box, label="Command\nController", style="rounded,filled", fillcolor="#E8F5E9"];
+  control_top [shape=box, label="ControlCommand\nService", style="rounded,filled", fillcolor="#E8F5E9"];
+
+  { rank=same; device_top; gateway_top; telemetry_top; ingest_top; db_top; command_top; control_top; }
+  device_top -> gateway_top -> telemetry_top -> ingest_top -> db_top -> command_top -> control_top [style=invis, weight=100];
+
+  node [shape=point, width=0.04, height=0.04, label=""];
+
+  d1; g1; t1; s1; db1; c1; cs1;
+  d2; g2; t2; s2; db2; c2; cs2;
+  d3; g3; t3; s3; db3; c3; cs3;
+  d4; g4; t4; s4; db4; c4; cs4;
+  d5; g5; t5; s5; db5; c5; cs5;
+  d6; g6; t6; s6; db6; c6; cs6;
+  d7; g7; t7; s7; db7; c7; cs7;
+  d8; g8; t8; s8; db8; c8; cs8;
+  d9; g9; t9; s9; db9; c9; cs9;
+  d10; g10; t10; s10; db10; c10; cs10;
+  d11; g11; t11; s11; db11; c11; cs11;
+  d12; g12; t12; s12; db12; c12; cs12;
+
+  { rank=same; d1; g1; t1; s1; db1; c1; cs1; }
+  { rank=same; d2; g2; t2; s2; db2; c2; cs2; }
+  { rank=same; d3; g3; t3; s3; db3; c3; cs3; }
+  { rank=same; d4; g4; t4; s4; db4; c4; cs4; }
+  { rank=same; d5; g5; t5; s5; db5; c5; cs5; }
+  { rank=same; d6; g6; t6; s6; db6; c6; cs6; }
+  { rank=same; d7; g7; t7; s7; db7; c7; cs7; }
+  { rank=same; d8; g8; t8; s8; db8; c8; cs8; }
+  { rank=same; d9; g9; t9; s9; db9; c9; cs9; }
+  { rank=same; d10; g10; t10; s10; db10; c10; cs10; }
+  { rank=same; d11; g11; t11; s11; db11; c11; cs11; }
+  { rank=same; d12; g12; t12; s12; db12; c12; cs12; }
+
+  device_top -> d1 -> d2 -> d3 -> d4 -> d5 -> d6 -> d7 -> d8 -> d9 -> d10 -> d11 -> d12 [style=dashed, arrowhead=none, color="#777777"];
+  gateway_top -> g1 -> g2 -> g3 -> g4 -> g5 -> g6 -> g7 -> g8 -> g9 -> g10 -> g11 -> g12 [style=dashed, arrowhead=none, color="#777777"];
+  telemetry_top -> t1 -> t2 -> t3 -> t4 -> t5 -> t6 -> t7 -> t8 -> t9 -> t10 -> t11 -> t12 [style=dashed, arrowhead=none, color="#777777"];
+  ingest_top -> s1 -> s2 -> s3 -> s4 -> s5 -> s6 -> s7 -> s8 -> s9 -> s10 -> s11 -> s12 [style=dashed, arrowhead=none, color="#777777"];
+  db_top -> db1 -> db2 -> db3 -> db4 -> db5 -> db6 -> db7 -> db8 -> db9 -> db10 -> db11 -> db12 [style=dashed, arrowhead=none, color="#777777"];
+  command_top -> c1 -> c2 -> c3 -> c4 -> c5 -> c6 -> c7 -> c8 -> c9 -> c10 -> c11 -> c12 [style=dashed, arrowhead=none, color="#777777"];
+  control_top -> cs1 -> cs2 -> cs3 -> cs4 -> cs5 -> cs6 -> cs7 -> cs8 -> cs9 -> cs10 -> cs11 -> cs12 [style=dashed, arrowhead=none, color="#777777"];
+
+  d1 -> g1 [label="sendSensorPayload(payload)"];
+  g2 -> t2 [label="POST /api/device-telemetry"];
+  t3 -> s3 [label="ingest(request)"];
+  s4 -> db4 [label="validate device/sensor\ninsert sensor_data\nupdate runtime_state"];
+  db5 -> s5 [style=dashed, label="saved"];
+  s6 -> t6 [style=dashed, label="ingest result"];
+  t7 -> g7 [style=dashed, label="200 OK"];
+
+  alt_note [shape=box, label="alt [command exists] / [no command]", style="rounded,dashed,filled", fillcolor="#FFF8E1"];
+  { rank=same; alt_note; d8; g8; t8; s8; db8; c8; cs8; }
+
+  d8 -> g8 [label="pollCommand()"];
+  g9 -> c9 [label="GET /api/v1/device/{deviceKey}/commands/next"];
+  c10 -> cs10 [label="findPendingCommand(deviceKey)"];
+  cs11 -> db11 [label="load/update command status"];
+  db12 -> cs12 [style=dashed, label="command payload or empty"];
+  cs12 -> c12 [style=dashed, label="result"];
+  c12 -> g12 [style=dashed, label="200 OK"];
+  g12 -> d12 [style=dashed, label="execute command or no command"];
+
+  ack_note [shape=note, label="opt [command executed]\nDevice sends ACK through gateway\nPOST /commands/ack -> set ACKED", fillcolor="#F8F9FA"];
+  ack_note -> c12 [style=dotted, arrowhead=none];
+}

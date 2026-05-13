@@ -1,0 +1,62 @@
+digraph ComponentFrontendApi {
+  graph [
+    rankdir=LR,
+    label="Biểu đồ thành phần - Giao diện web và backend API",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.6,
+    ranksep=0.9,
+    splines=ortho
+  ];
+
+  node [fontsize=10, fontname="Arial", style="filled", fillcolor="#FFFFFF"];
+  edge [fontsize=9, fontname="Arial", color="#374151", arrowsize=0.8];
+
+  subgraph cluster_frontend {
+    label="<<subsystem>> Tầng giao diện";
+    style="rounded";
+    color="#6EA8FE";
+
+    pages [shape=component, label="<<component>>\nMàn hình Dashboard\nCấu hình\nLịch sử"];
+    auth_state [shape=component, label="<<component>>\nKhối quản lý phiên"];
+    api_client [shape=component, label="<<component>>\nĐầu nối API"];
+    fe_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#6EA8FE"];
+  }
+
+  subgraph cluster_backend {
+    label="<<subsystem>> Backend API";
+    style="rounded";
+    color="#81C784";
+
+    auth_api [shape=component, label="<<component>>\nKhối xác thực"];
+    dashboard_api [shape=component, label="<<component>>\nKhối Dashboard"];
+    control_api [shape=component, label="<<component>>\nKhối điều khiển"];
+    config_api [shape=component, label="<<component>>\nKhối cấu hình"];
+    be_port [shape=square, width=0.18, height=0.18, fixedsize=true, label="", fillcolor="#81C784"];
+  }
+
+  i_auth [shape=circle, width=0.9, label="IAuthAPI", fillcolor="#F7FFF7"];
+  i_dashboard [shape=circle, width=1.15, label="IDashboardAPI", fillcolor="#F7FFF7"];
+  i_control [shape=circle, width=1.0, label="IControlAPI", fillcolor="#F7FFF7"];
+  i_config [shape=circle, width=0.95, label="IConfigAPI", fillcolor="#F7FFF7"];
+
+  pages -> api_client [arrowhead=vee];
+  auth_state -> api_client [arrowhead=vee];
+  api_client -> fe_port [arrowhead=none];
+
+  fe_port -> i_auth [style=dashed, arrowhead=vee, label=""];
+  fe_port -> i_dashboard [style=dashed, arrowhead=vee, label="SSE"];
+  fe_port -> i_control [style=dashed, arrowhead=vee, label=""];
+  fe_port -> i_config [style=dashed, arrowhead=vee, label=""];
+
+  i_auth -> be_port [arrowhead=none];
+  i_dashboard -> be_port [arrowhead=none];
+  i_control -> be_port [arrowhead=none];
+  i_config -> be_port [arrowhead=none];
+
+  be_port -> auth_api [arrowhead=none];
+  be_port -> dashboard_api [arrowhead=none];
+  be_port -> control_api [arrowhead=none];
+  be_port -> config_api [arrowhead=none];
+}

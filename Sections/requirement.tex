@@ -1,0 +1,98 @@
+\section{Các yêu cầu hệ thống}
+
+\subsection{User Requirements}
+
+\subsubsection{Module 1 – Nhận và hiển thị dữ liệu từ thiết bị}
+
+\textbf{Mục tiêu:} Thu thập dữ liệu cảm biến và hiển thị theo thời gian thực.
+
+\begin{itemize}
+    \item (FR1) Hệ thống phải nhận dữ liệu từ các cảm biến nhiệt độ, độ ẩm, ánh sáng, chuyển động và các loại cảm biến mở rộng được định nghĩa trong backend.
+    
+    \item (FR2) Dashboard Web phải cập nhật dữ liệu mới thông qua API tổng hợp và kênh realtime Server-Sent Events.
+    
+    \item (FR3) Hệ thống phải hiển thị trạng thái hiện tại của các thiết bị theo capability như \texttt{POWER}, \texttt{SPEED}, \texttt{BRIGHTNESS}, \texttt{MODE}.
+    
+    \item (FR4) Người dùng phải xem được biểu đồ lịch sử dữ liệu cảm biến theo khoảng thời gian được hỗ trợ trên giao diện History.
+    
+    \item (FR5) Hệ thống phải lưu trữ dữ liệu cảm biến vào cơ sở dữ liệu để phục vụ việc truy xuất và phân tích sau này.
+    
+    \item (FR6) Nếu thiết bị không gửi dữ liệu trong khoảng thời gian cấu hình, hệ thống phải cập nhật trạng thái offline và tạo cảnh báo phù hợp.
+\end{itemize}
+
+\subsubsection{Module 2 – Kiểm tra dữ liệu vượt ngưỡng}
+
+\textbf{Mục tiêu:} Phát hiện các điều kiện bất thường và tạo cảnh báo.
+
+\begin{itemize}
+    \item (FR7) Quản trị viên phải có khả năng cấu hình các ngưỡng an toàn như: nhiệt độ cao/thấp, ánh sáng cao/thấp và nhiệt độ nguy hiểm.
+    
+    \item (FR8) Nếu nhiệt độ vượt ngưỡng cao trong khoảng thời gian cấu hình (ví dụ 2 phút), hệ thống phải tạo cảnh báo.
+    
+    \item (FR9) Nếu ánh sáng thấp hơn hoặc cao hơn mức cấu hình, hệ thống phải kích hoạt hành động tự động tương ứng.
+    
+    \item (FR10) Hệ thống phải áp dụng cơ chế hysteresis để tránh việc thiết bị bật/tắt liên tục khi giá trị cảm biến dao động quanh ngưỡng.
+    
+    \item (FR11) Khi giá trị vượt ngưỡng nguy hiểm (ví dụ $T_{critical}$), hệ thống phải hiển thị cảnh báo trên dashboard, hỗ trợ thông báo qua kênh được cấu hình và ghi log sự kiện.
+    
+    \item (FR12) Nếu phát hiện dữ liệu cảm biến không hợp lệ hoặc vượt ngoài miền cho phép, hệ thống phải chuyển thiết bị về trạng thái an toàn và ghi nhận lỗi.
+    
+    \item (FR13) Mỗi cảnh báo phải có ba trạng thái: \textit{Active}, \textit{Acknowledged} và \textit{Resolved}.
+\end{itemize}
+
+\subsubsection{Module 3 – Điều khiển thiết bị}
+
+\textbf{Mục tiêu:} Cho phép người dùng điều khiển thiết bị theo cách thủ công hoặc tự động.
+
+\begin{itemize}
+    \item (FR14) Người dùng phải có khả năng điều khiển thiết bị từ dashboard Web và theo dõi trạng thái lệnh.
+    
+    \item (FR15) Thiết bị/simulator hỗ trợ nhập mật khẩu bảo mật qua luồng hồng ngoại; khi nhập sai quá số lần cấu hình, hệ thống tạo cảnh báo và ghi log sự kiện.
+    
+    \item (FR16) Khi người dùng điều khiển thủ công trong chế độ tự động, hệ thống phải chuyển sang chế độ MANUAL, giữ trạng thái thiết bị trong thời gian $T_{hold}$ và sau đó quay lại chế độ trước đó.
+    
+    \item (FR17) Trong chế độ AUTO, hệ thống phải tự động điều khiển quạt theo nhiệt độ và đèn theo mức ánh sáng.
+    
+    \item (FR18) Trong chế độ SLEEP, hệ thống phải ưu tiên tiết kiệm điện và giảm mức hoạt động của thiết bị.
+    
+    \item (FR19) Trong chế độ AWAY, hệ thống phải tắt các thiết bị không cần thiết và chỉ kích hoạt khi vượt ngưỡng an toàn.
+    
+    \item (FR20) Quản trị viên phải có khả năng cấu hình lịch tự động chuyển đổi giữa các chế độ AUTO, SLEEP và AWAY theo khung giờ.
+\end{itemize}
+
+\subsubsection{Module 4 – Ghi nhận hoạt động (Logging và Audit)}
+
+\textbf{Mục tiêu:} Theo dõi và lưu trữ toàn bộ hoạt động của hệ thống.
+
+\begin{itemize}
+    \item (FR21) Mọi hành động bật/tắt thiết bị phải được ghi log bao gồm: người thực hiện, thời điểm và trạng thái trước/sau của thiết bị.
+    
+    \item (FR22) Mọi cảnh báo phải được lưu lại với các thông tin: thời điểm kích hoạt, thời điểm xác nhận và thời điểm kết thúc.
+    
+    \item (FR23) Mọi thay đổi cấu hình hệ thống như thay đổi ngưỡng, lịch hoạt động hoặc chế độ mặc định phải được ghi log đầy đủ.
+    
+    \item (FR24) Quản trị viên phải có khả năng truy xuất và lọc lịch sử hoạt động theo thời gian, loại sự kiện và người thực hiện.
+\end{itemize}
+
+\subsubsection{Module 5 – Ứng dụng Web}
+
+\textbf{Mục tiêu:} Cung cấp giao diện sử dụng và phân quyền truy cập.
+
+\begin{itemize}
+    \item (FR25) Hệ thống phải yêu cầu người dùng đăng nhập bằng tài khoản cục bộ hoặc Google OAuth để truy cập các chức năng được bảo vệ.
+    
+    \item (FR26) Hệ thống phải hỗ trợ phân quyền người dùng gồm:
+    \begin{itemize}
+        \item \texttt{ADMIN}/\texttt{SUPER\_ADMIN}: quản lý người dùng, cấu hình hệ thống và xem audit log.
+        \item Người dùng trong home: xem dữ liệu, điều khiển thiết bị và thao tác trong phạm vi quyền home.
+        \item Vai trò home như \texttt{OWNER}, \texttt{CO\_OWNER}, \texttt{RESIDENT}, \texttt{TECHNICIAN}, \texttt{VIEWER} quyết định quyền ở cấp nhà.
+    \end{itemize}
+    
+    \item (FR27) Dashboard tổng quan phải hiển thị dữ liệu realtime, trạng thái thiết bị và các cảnh báo hiện tại.
+    
+    \item (FR28) Quản trị viên phải có khả năng cấu hình ngưỡng và lịch hoạt động trực tiếp từ giao diện hệ thống.
+    
+    \item (FR29) Người dùng phải xem được cảnh báo mới trên dashboard; các kênh email, Telegram phụ thuộc cấu hình triển khai.
+\end{itemize}
+
+\input{Sections/functional}

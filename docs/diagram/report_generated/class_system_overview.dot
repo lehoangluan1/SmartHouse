@@ -1,0 +1,198 @@
+digraph ClassSystemOverview {
+  graph [
+    rankdir=TB,
+    label="Biểu đồ lớp tổng quan hệ thống Smart Home",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial",
+    nodesep=0.35,
+    ranksep=0.55,
+    splines=polyline
+  ];
+
+  node [shape=plaintext, fontsize=10, fontname="Arial"];
+  edge [fontsize=9, fontname="Arial", color="#374151", arrowsize=0.8];
+
+  User [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>User</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">userId<BR ALIGN="LEFT"/>email<BR ALIGN="LEFT"/>vaiTroHeThong</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">dangNhap()<BR ALIGN="LEFT"/>capQuyen()</TD></TR>
+    </TABLE>
+  >];
+
+  Home [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>Home</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">homeId<BR ALIGN="LEFT"/>tenNha<BR ALIGN="LEFT"/>trangThai</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">capNhatTrangThai()</TD></TR>
+    </TABLE>
+  >];
+
+  HomeMember [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>HomeMember</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">ngayThamGia<BR ALIGN="LEFT"/>trangThaiThanhVien</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">ganVaiTro()</TD></TR>
+    </TABLE>
+  >];
+
+  Role [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;value object&gt;&gt;</FONT><BR/><B>Role</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">tenVaiTro<BR ALIGN="LEFT"/>phamVi</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">kiemTraQuyen()</TD></TR>
+    </TABLE>
+  >];
+
+  Permission [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;value object&gt;&gt;</FONT><BR/><B>Permission</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">maQuyen<BR ALIGN="LEFT"/>moTa</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1"></TD></TR>
+    </TABLE>
+  >];
+
+  Device [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>Device</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">deviceId<BR ALIGN="LEFT"/>tenThietBi<BR ALIGN="LEFT"/>loaiThietBi<BR ALIGN="LEFT"/>trangThaiKetNoi</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">capNhatTrangThai()</TD></TR>
+    </TABLE>
+  >];
+
+  DeviceCapability [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;value object&gt;&gt;</FONT><BR/><B>DeviceCapability</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">tenNangLuc<BR ALIGN="LEFT"/>kieuGiaTri<BR ALIGN="LEFT"/>phamViGiaTri</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1"></TD></TR>
+    </TABLE>
+  >];
+
+  Sensor [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>Sensor</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">sensorId<BR ALIGN="LEFT"/>loaiCamBien<BR ALIGN="LEFT"/>donViMacDinh</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">ghiNhanDuLieu()</TD></TR>
+    </TABLE>
+  >];
+
+  SensorData [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>SensorData</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">giaTri<BR ALIGN="LEFT"/>donVi<BR ALIGN="LEFT"/>thoiDiemGhiNhan</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1"></TD></TR>
+    </TABLE>
+  >];
+
+  DeviceState [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>DeviceState</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">tenTrangThai<BR ALIGN="LEFT"/>giaTri<BR ALIGN="LEFT"/>thoiDiemCapNhat</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1"></TD></TR>
+    </TABLE>
+  >];
+
+  ControlCommand [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>ControlCommand</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">loaiLenh<BR ALIGN="LEFT"/>giaTriDieuKhien<BR ALIGN="LEFT"/>trangThaiLenh</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">taoLenhDieuKhien()</TD></TR>
+    </TABLE>
+  >];
+
+  AutomationRule [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;service&gt;&gt;</FONT><BR/><B>AutomationRule</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">tenQuyTac<BR ALIGN="LEFT"/>dieuKien<BR ALIGN="LEFT"/>hanhDong</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">danhGiaDieuKien()</TD></TR>
+    </TABLE>
+  >];
+
+  ModeSchedule [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>ModeSchedule</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">cheDo<BR ALIGN="LEFT"/>khungGio<BR ALIGN="LEFT"/>trangThai</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">apDungCheDo()</TD></TR>
+    </TABLE>
+  >];
+
+  Alert [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>Alert</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">mucDo<BR ALIGN="LEFT"/>trangThai<BR ALIGN="LEFT"/>thoiDiemPhatSinh</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">kichHoatCanhBao()</TD></TR>
+    </TABLE>
+  >];
+
+  ActivityLog [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;entity&gt;&gt;</FONT><BR/><B>ActivityLog</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">loaiSuKien<BR ALIGN="LEFT"/>noiDung<BR ALIGN="LEFT"/>thoiDiemGhiNhan</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">ghiNhatKy()</TD></TR>
+    </TABLE>
+  >];
+
+  NotificationChannel [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><FONT POINT-SIZE="9">&lt;&lt;service&gt;&gt;</FONT><BR/><B>NotificationChannel</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">kenhGui<BR ALIGN="LEFT"/>diaChiNhan<BR ALIGN="LEFT"/>trangThai</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">guiThongBao()</TD></TR>
+    </TABLE>
+  >];
+
+  EmailChannel [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><B>EmailChannel</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">emailNhan</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1"></TD></TR>
+    </TABLE>
+  >];
+
+  TelegramChannel [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><B>TelegramChannel</B></TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1">chatId</TD></TR>
+      <TR><TD ALIGN="LEFT" BORDER="1"></TD></TR>
+    </TABLE>
+  >];
+
+  User -> HomeMember [arrowhead=none, taillabel="1", headlabel="*"];
+  Home -> HomeMember [arrowhead=none, taillabel="1", headlabel="*"];
+  HomeMember -> Role [arrowhead=none, taillabel="*", headlabel="1"];
+  Role -> Permission [arrowtail=odiamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+
+  Home -> Device [arrowtail=diamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+  Device -> DeviceCapability [arrowtail=odiamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+  Device -> Sensor [arrowtail=diamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+  Sensor -> SensorData [arrowtail=diamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+  Device -> DeviceState [arrowtail=diamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+
+  User -> ControlCommand [arrowhead=none, taillabel="1", headlabel="*"];
+  ControlCommand -> Device [arrowhead=none, taillabel="*", headlabel="1"];
+
+  Home -> AutomationRule [arrowtail=diamond, arrowhead=none, dir=both, taillabel="1", headlabel="*"];
+  ModeSchedule -> Home [arrowhead=none, taillabel="*", headlabel="1"];
+  ModeSchedule -> AutomationRule [style=dashed, arrowhead=vee];
+  AutomationRule -> SensorData [style=dashed, arrowhead=vee];
+  AutomationRule -> ControlCommand [style=dashed, arrowhead=vee];
+
+  SensorData -> Alert [style=dashed, arrowhead=vee];
+  Device -> Alert [style=dashed, arrowhead=vee];
+  AutomationRule -> Alert [style=dashed, arrowhead=vee];
+  Alert -> NotificationChannel [arrowhead=none, taillabel="*", headlabel="1..*"];
+
+  User -> ActivityLog [style=dashed, arrowhead=vee];
+  Device -> ActivityLog [style=dashed, arrowhead=vee];
+  AutomationRule -> ActivityLog [style=dashed, arrowhead=vee];
+
+  EmailChannel -> NotificationChannel [arrowhead=empty];
+  TelegramChannel -> NotificationChannel [arrowhead=empty];
+
+  { rank=same; User; Home; Role; }
+  { rank=same; HomeMember; Permission; }
+  { rank=same; Device; AutomationRule; ModeSchedule; }
+  { rank=same; DeviceCapability; Sensor; DeviceState; ControlCommand; }
+  { rank=same; SensorData; Alert; ActivityLog; }
+  { rank=same; EmailChannel; TelegramChannel; NotificationChannel; }
+}

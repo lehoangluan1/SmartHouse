@@ -1,0 +1,48 @@
+@startuml
+title Component Diagram - Device Gateway va Camera Integration
+
+skinparam componentStyle uml2
+skinparam linetype ortho
+skinparam shadowing false
+left to right direction
+
+package "Device Side" <<subsystem>> {
+  component "IoT Firmware\naiot_code_v3.py" as Firmware <<component>>
+  component "Virtual Simulator\nvirtual_device_simulator.py" as Simulator <<component>>
+}
+
+package "Gateway Runtime" <<subsystem>> {
+  component "gateway.py" as GatewayComp <<component>>
+}
+
+package "Backend API" <<subsystem>> {
+  component "TelemetryController" as TelemetryController <<component>>
+  component "CommandController" as CommandController <<component>>
+}
+
+component "Camera Service\ncamera_interface.py" as Camera <<component>>
+
+interface "ITelemetryAPI" as ITelemetry
+interface "ICommandPollingAPI" as ICommand
+interface "ICommandAckAPI" as IAck
+interface "ICameraAPI" as ICamera
+
+Firmware --> GatewayComp : telemetry / command
+Simulator --> GatewayComp : telemetry / command
+
+GatewayComp ..> ITelemetry : required socket\nHTTP REST
+GatewayComp ..> ICommand : required socket\nHTTP polling
+GatewayComp ..> IAck : required socket\nHTTP REST
+GatewayComp ..> ICamera : required socket\nHTTP /check_human
+
+ITelemetry - TelemetryController : provided lollipop
+ICommand - CommandController : provided lollipop
+IAck - CommandController : provided lollipop
+ICamera - Camera : provided lollipop
+
+note bottom of GatewayComp
+Port: integration client
+Source: gateway.py
+end note
+
+@enduml

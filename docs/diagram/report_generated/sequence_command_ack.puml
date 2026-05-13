@@ -1,0 +1,43 @@
+@startuml
+title Sequence Diagram - Xac nhan ket qua thuc thi lenh
+
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 80
+skinparam shadowing false
+hide footbox
+
+actor "IoT Device /\nSimulator" as Device
+participant "gateway.py" as Gateway
+participant "CommandController" as Controller
+participant "ControlCommandService" as CommandService
+database "PostgreSQL" as DB
+
+Device -> Gateway : ackCommand(commandId, status)
+activate Gateway
+
+Gateway -> Controller : POST /api/v1/device/{deviceKey}/commands/ack
+activate Controller
+
+Controller -> CommandService : acknowledge(commandId, status)
+activate CommandService
+
+CommandService -> DB : update control_commands
+activate DB
+DB --> CommandService : updated
+deactivate DB
+
+alt valid ACK
+    CommandService --> Controller : ack accepted
+    Controller --> Gateway : 200 OK
+    Gateway --> Device : ack accepted
+else invalid ACK
+    CommandService --> Controller : validation error
+    Controller --> Gateway : 400 Bad Request
+    Gateway --> Device : ack rejected
+end
+
+deactivate CommandService
+deactivate Controller
+deactivate Gateway
+
+@enduml

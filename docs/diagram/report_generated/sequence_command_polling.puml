@@ -1,0 +1,45 @@
+@startuml
+title Sequence Diagram - Thiet bi polling lenh dieu khien
+
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 80
+skinparam shadowing false
+hide footbox
+
+actor "IoT Device /\nSimulator" as Device
+participant "gateway.py" as Gateway
+participant "CommandController" as Controller
+participant "ControlCommandService" as CommandService
+database "PostgreSQL" as DB
+
+loop polling interval
+    Device -> Gateway : pollCommand(deviceKey)
+    activate Gateway
+
+    Gateway -> Controller : GET /api/v1/device/{deviceKey}/commands/next
+    activate Controller
+
+    Controller -> CommandService : getNextCommand(deviceKey)
+    activate CommandService
+
+    CommandService -> DB : find pending command
+    activate DB
+    DB --> CommandService : command or empty
+    deactivate DB
+
+    alt command exists
+        CommandService --> Controller : command payload
+        Controller --> Gateway : 200 OK + command
+        Gateway --> Device : execute command
+    else no command
+        CommandService --> Controller : empty result
+        Controller --> Gateway : 204 No Content
+        Gateway --> Device : no command
+    end
+
+    deactivate CommandService
+    deactivate Controller
+    deactivate Gateway
+end
+
+@enduml

@@ -1,0 +1,65 @@
+digraph ActivityTelemetryAutomation {
+  graph [
+    rankdir=TB,
+    label="Activity Diagram - Telemetry va tu dong hoa",
+    labelloc=t,
+    fontsize=18,
+    fontname="Arial"
+  ];
+
+  node [fontsize=11, fontname="Arial"];
+  edge [fontsize=10, fontname="Arial"];
+
+  start [shape=circle, label="", width=0.25, height=0.25, style=filled, fillcolor="#000000"];
+  end [shape=doublecircle, label="", width=0.3, height=0.3, style=filled, fillcolor="#000000"];
+
+  subgraph cluster_device {
+    label="Thiet bi / Gateway";
+    style="rounded";
+    color="#BFD7FF";
+    read_sensor [shape=box, style=rounded, label="Doc cam bien\nnhiet do, do am,\nanh sang, chuyen dong"];
+    send_gateway [shape=box, style=rounded, label="Gui telemetry\nden gateway.py"];
+    forward_backend [shape=box, style=rounded, label="Gateway chuyen tiep\n/api/device-telemetry"];
+  }
+
+  subgraph cluster_backend {
+    label="Backend";
+    style="rounded";
+    color="#C8E6C9";
+    controller [shape=box, style=rounded, label="TelemetryController\nnhan request"];
+    validate [shape=diamond, label="Device va sensor\nhop le?"];
+    persist [shape=box, style=rounded, label="TelemetryPersistenceService\nluu sensor_data"];
+    runtime [shape=box, style=rounded, label="Cap nhat runtime state\nva last_seen"];
+    publish [shape=box, style=rounded, label="Phat DomainEvent\nsau transaction"];
+    automation_check [shape=diamond, label="Dung sensor\ntrong config active?"];
+    automation [shape=box, style=rounded, label="ModeAutomationService\nap dung fan/light policy"];
+    no_auto [shape=box, style=rounded, label="Chi cap nhat dashboard\nva audit"];
+    reject [shape=box, style=rounded, label="Tra loi loi hop le hoa"];
+  }
+
+  subgraph cluster_database {
+    label="Database";
+    style="rounded";
+    color="#FFE0B2";
+    db [shape=cylinder, label="PostgreSQL\nsensor_data\nruntime_state\nactivity_logs"];
+  }
+
+  start -> read_sensor;
+  read_sensor -> send_gateway;
+  send_gateway -> forward_backend;
+  forward_backend -> controller;
+  controller -> validate;
+  validate -> persist [label="Hop le"];
+  validate -> reject [label="Khong hop le"];
+  persist -> db [label="insert"];
+  persist -> runtime;
+  runtime -> db [label="update"];
+  runtime -> publish;
+  publish -> automation_check;
+  automation_check -> automation [label="Co cau hinh"];
+  automation_check -> no_auto [label="Khong ap dung"];
+  automation -> db [label="command/log"];
+  no_auto -> end;
+  automation -> end;
+  reject -> end;
+}
